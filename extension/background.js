@@ -14,8 +14,10 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'addToCalendar') {
     try {
+      console.log('Selected text:', info.selectionText);
+      
       // Process the selected text
-      const response = await fetch('https://ai-calendar-assistant.onrender.com/process_event', {
+      const response = await fetch('https://ai-calendar-app.onrender.com/process_event', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -23,20 +25,32 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         body: JSON.stringify({ text: info.selectionText })
       });
 
+      console.log('Backend response status:', response.status);
+      const responseText = await response.text();
+      console.log('Backend response:', responseText);
+
       if (!response.ok) {
-        throw new Error('Failed to process event details');
+        throw new Error(`Failed to process event details: ${responseText}`);
       }
 
-      const eventDetails = await response.json();
+      const eventDetails = JSON.parse(responseText);
+      console.log('Parsed event details:', eventDetails);
       
       // Store event details for the confirmation popup
       await chrome.storage.local.set({ pendingEvent: eventDetails });
+      console.log('Stored event details in local storage');
 
       // Show modal in the current tab
       await chrome.tabs.sendMessage(tab.id, { action: 'showModal' });
+      console.log('Sent showModal message to content script');
 
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Detailed error:', {
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause
+      });
+
       // Show error notification
       chrome.notifications.create({
         type: 'basic',
@@ -60,6 +74,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse(response);
       })
       .catch(error => {
+        console.error('Calendar event creation error:', error);
         sendResponse({ success: false, error: error.message });
       });
     return true;
@@ -69,15 +84,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Create calendar event
 async function createCalendarEvent(eventDetails) {
   try {
+    console.log('Creating calendar event with details:', eventDetails);
+
     // Get OAuth token
     const token = await chrome.identity.getAuthToken({ interactive: true });
     if (!token) {
       throw new Error('Failed to get authentication token');
     }
+    console.log('Got authentication token');
 
     // Format date and time
     const startDateTime = `${eventDetails.date}T${eventDetails.startTime}:00`;
     const endDateTime = `${eventDetails.date}T${eventDetails.endTime}:00`;
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    const eventData = {
+      summary: eventDetails.title,
+      location: eventDetails.location,
+      start: {
+        dateTime: startDateTime,
+        timeZone: timeZone
+      },
+      end: {
+        dateTime: endDateTime,
+        timeZone: timeZone
+      },
+      attendees: eventDetails.attendees
+    };
+    console.log('Prepared event data:', eventData);
 
     // Create event
     const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
@@ -86,29 +120,24 @@ async function createCalendarEvent(eventDetails) {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        summary: eventDetails.title,
-        location: eventDetails.location,
-        start: {
-          dateTime: startDateTime,
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        },
-        end: {
-          dateTime: endDateTime,
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        },
-        attendees: eventDetails.attendees
-      })
+      body: JSON.stringify(eventData)
     });
 
+    console.log('Calendar API response status:', response.status);
+    const responseData = await response.json();
+    console.log('Calendar API response:', responseData);
+
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error?.message || 'Failed to create calendar event');
+      throw new Error(responseData.error?.message || 'Failed to create calendar event');
     }
 
     return { success: true };
   } catch (error) {
-    console.error('Error creating calendar event:', error);
+    console.error('Detailed calendar error:', {
+      message: error.message,
+      stack: error.stack,
+      cause: error.cause
+    });
     return { success: false, error: error.message };
   }
 }
