@@ -1,227 +1,214 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Confirm Event Details</title>
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <title>Add Calendar Event</title>
   <style>
-    body {
-      font-family: 'Google Sans', Arial, sans-serif;
+    @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500&display=swap');
+
+    * {
+      box-sizing: border-box;
       margin: 0;
       padding: 0;
-      color: #3c4043;
-      max-width: 500px;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
     }
 
-    .content {
-      padding: 24px;
+    body {
+      font-family: 'Google Sans', Arial, sans-serif;
+      color: #202124;
+      background: white;
+      min-width: 400px;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid #dadce0;
+    }
+
+    .header h1 {
+      font-size: 22px;
+      font-weight: 400;
+      color: #202124;
+    }
+
+    .close-button {
+      border: none;
+      background: none;
+      padding: 8px;
+      cursor: pointer;
+      color: #5f6368;
+    }
+
+    .close-button:hover {
+      background: #f1f3f4;
+      border-radius: 50%;
+    }
+
+    .form-container {
+      padding: 20px;
       flex: 1;
       overflow-y: auto;
     }
 
-    .header {
-      margin-bottom: 24px;
-    }
-
-    h1 {
-      font-size: 24px;
-      font-weight: 400;
-      margin: 0;
-      color: #202124;
-    }
-
     .form-group {
-      margin-bottom: 20px;
-      position: relative;
+      margin-bottom: 16px;
     }
 
-    label {
-      display: block;
-      margin-bottom: 8px;
-      font-size: 14px;
+    .input-field {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      font-size: 16px;
+      color: #202124;
+      background: white;
+      font-family: 'Google Sans', Arial, sans-serif;
+    }
+
+    .input-field::placeholder {
       color: #5f6368;
     }
 
-    input[type="text"],
-    input[type="date"],
-    input[type="time"],
-    textarea {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid #dadce0;
-      border-radius: 4px;
-      font-size: 14px;
-      box-sizing: border-box;
-    }
-
-    input[type="text"]:focus,
-    input[type="date"]:focus,
-    input[type="time"]:focus,
-    textarea:focus {
+    .input-field:focus {
       outline: none;
       border-color: #1a73e8;
     }
 
-    .icon {
-      color: #5f6368;
-      vertical-align: middle;
-      margin-right: 8px;
-      font-size: 20px;
-    }
-
-    .buttons {
+    .time-row {
       display: flex;
-      justify-content: flex-end;
       gap: 12px;
-      padding: 16px 24px;
-      background: white;
-      border-top: 1px solid #dadce0;
-      position: sticky;
-      bottom: 0;
-      right: 0;
-      left: 0;
-      z-index: 1;
     }
 
-    button {
-      padding: 8px 24px;
-      border-radius: 4px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      border: none;
-    }
-
-    button.cancel {
-      background: none;
-      color: #5f6368;
-    }
-
-    button.cancel:hover {
-      background: #f1f3f4;
-    }
-
-    button.add {
-      background: #1a73e8;
-      color: white;
-    }
-
-    button.add:hover {
-      background: #1557b0;
-    }
-
-    .error {
-      color: #d93025;
-      font-size: 12px;
-      margin-top: 4px;
-      display: none;
-    }
-
-    textarea {
-      min-height: 100px;
-      resize: vertical;
-    }
-
-    .form-row {
-      display: flex;
-      gap: 16px;
-    }
-
-    .form-row .form-group {
+    .time-row .form-group {
       flex: 1;
     }
 
-    .past-date-warning {
-      background: #fce8e6;
-      color: #d93025;
-      padding: 8px 12px;
-      border-radius: 4px;
-      font-size: 13px;
-      margin-bottom: 16px;
+    .cta-button {
+      width: 100%;
+      padding: 14px;
+      background: #e88d72;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: 'Google Sans', Arial, sans-serif;
+      margin-top: 16px;
+    }
+
+    .cta-button:hover {
+      background: #e07f62;
+    }
+
+    /* Success Screen */
+    .success-screen {
+      display: none;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .success-screen.active {
+      display: block;
+    }
+
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      background: #e88d72;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+    }
+
+    .success-icon svg {
+      width: 32px;
+      height: 32px;
+      fill: white;
+    }
+
+    .success-title {
+      font-size: 24px;
+      margin-bottom: 12px;
+      color: #202124;
+    }
+
+    .success-message {
+      color: #5f6368;
+      font-size: 16px;
+      margin-bottom: 32px;
+    }
+
+    .form-screen {
+      display: block;
+    }
+
+    .form-screen.hidden {
       display: none;
     }
   </style>
 </head>
 <body>
-  <div class="content">
+  <div class="container">
     <div class="header">
-      <h1>Confirm event details</h1>
+      <h1>Add Calendar Event</h1>
+      <button class="close-button" id="closeButton">✕</button>
     </div>
 
-    <div class="past-date-warning" id="pastDateWarning">
-      This event is scheduled in the past
-    </div>
-
-    <form id="eventForm">
-      <div class="form-group">
-        <label>
-          <i class="material-icons icon">event_note</i>
-          Title
-        </label>
-        <input type="text" id="title" required>
-        <div class="error" id="titleError">Please enter a title</div>
-      </div>
-
-      <div class="form-group">
-        <label>
-          <i class="material-icons icon">event</i>
-          Date
-        </label>
-        <input type="date" id="date" required>
-        <div class="error" id="dateError">Please select a valid date</div>
-      </div>
-
-      <div class="form-row">
+    <div class="form-screen" id="formScreen">
+      <div class="form-container">
         <div class="form-group">
-          <label>
-            <i class="material-icons icon">schedule</i>
-            Start Time
-          </label>
-          <input type="time" id="startTime" required>
-          <div class="error" id="startTimeError">Please select a start time</div>
+          <input type="text" class="input-field" id="title" placeholder="Add title" required>
         </div>
 
         <div class="form-group">
-          <label>
-            <i class="material-icons icon">schedule</i>
-            End Time
-          </label>
-          <input type="time" id="endTime">
-          <div class="error" id="endTimeError">End time must be after start time</div>
+          <input type="text" class="input-field" id="date" placeholder="Date" readonly>
         </div>
-      </div>
 
-      <div class="form-group">
-        <label>
-          <i class="material-icons icon">location_on</i>
-          Location
-        </label>
-        <input type="text" id="location">
-      </div>
+        <div class="time-row">
+          <div class="form-group">
+            <input type="text" class="input-field" id="startTime" placeholder="Start time" readonly>
+          </div>
+          <div class="form-group">
+            <input type="text" class="input-field" id="endTime" placeholder="End time" readonly>
+          </div>
+        </div>
 
-      <div class="form-group">
-        <label>
-          <i class="material-icons icon">people</i>
-          Guests (separate emails with commas)
-        </label>
-        <input type="text" id="attendees">
-      </div>
+        <div class="form-group">
+          <input type="text" class="input-field" id="location" placeholder="Add location">
+        </div>
 
-      <div class="form-group">
-        <label>
-          <i class="material-icons icon">description</i>
-          Description
-        </label>
-        <textarea id="description"></textarea>
-      </div>
-    </form>
-  </div>
+        <div class="form-group">
+          <input type="text" class="input-field" id="attendees" placeholder="Add guests">
+        </div>
 
-  <div class="buttons">
-    <button type="button" class="cancel" id="cancelButton">Cancel</button>
-    <button type="submit" class="add" form="eventForm">Add to Calendar</button>
+        <div class="form-group">
+          <textarea class="input-field" id="description" placeholder="Add description" rows="3"></textarea>
+        </div>
+
+        <button type="button" class="cta-button" id="addToCalendar">Add to Calendar</button>
+      </div>
+    </div>
+
+    <div class="success-screen" id="successScreen">
+      <div class="success-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+        </svg>
+      </div>
+      <h2 class="success-title">Confirm!</h2>
+      <p class="success-message">Your event has been added successfully. We've sent the details to your email.</p>
+      <button type="button" class="cta-button" id="backToHome">Back to Home</button>
+    </div>
   </div>
 
   <script src="confirm.js"></script>

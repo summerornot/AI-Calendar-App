@@ -29,14 +29,14 @@ function createModal() {
 
     #ai-calendar-modal .modal-content {
       background: white;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-      width: 500px;
-      height: 600px;
+      border-radius: 12px;
+      box-shadow: 0 24px 38px 3px rgba(0,0,0,0.14), 
+                  0 9px 46px 8px rgba(0,0,0,0.12), 
+                  0 11px 15px -7px rgba(0,0,0,0.2);
+      width: 400px;
       max-width: 95vw;
       max-height: 95vh;
       overflow: hidden;
-      position: relative;
     }
 
     #ai-calendar-modal iframe {
@@ -44,12 +44,36 @@ function createModal() {
       height: 100%;
       border: none;
     }
+
+    @media (max-width: 480px) {
+      #ai-calendar-modal .modal-content {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        border-radius: 0;
+      }
+    }
   `;
   document.head.appendChild(style);
+
+  // Handle iframe messages
+  window.addEventListener('message', function(event) {
+    if (event.data.action === 'closeModal') {
+      closeModal();
+    }
+  });
 
   // Close modal when clicking outside
   modal.querySelector('.modal-overlay').addEventListener('click', (e) => {
     if (e.target.classList.contains('modal-overlay')) {
+      closeModal();
+    }
+  });
+
+  // Close modal on escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
       closeModal();
     }
   });

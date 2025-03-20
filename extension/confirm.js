@@ -7,6 +7,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const locationInput = document.getElementById('location');
   const attendeesInput = document.getElementById('guests');
   const cancelButton = document.getElementById('cancel');
+  const formScreen = document.getElementById('formScreen');
+  const successScreen = document.getElementById('successScreen');
+  const closeButton = document.getElementById('closeButton');
+  const addToCalendarButton = document.getElementById('addToCalendar');
+  const backToHomeButton = document.getElementById('backToHome');
 
   // Get stored event details
   const { pendingEvent } = await chrome.storage.local.get('pendingEvent');
@@ -86,7 +91,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
       if (response.success) {
-        window.parent.postMessage({ action: 'closeModal' }, '*');
+        showSuccessScreen();
       } else {
         throw new Error(response.error || 'Failed to create event');
       }
@@ -121,4 +126,52 @@ document.addEventListener('DOMContentLoaded', async () => {
   cancelButton.addEventListener('click', () => {
     window.parent.postMessage({ action: 'closeModal' }, '*');
   });
+
+  // Handle close button
+  closeButton.addEventListener('click', () => {
+    window.parent.postMessage({ action: 'closeModal' }, '*');
+  });
+
+  // Handle add to calendar
+  addToCalendarButton.addEventListener('click', async () => {
+    const eventDetails = {
+      title: titleInput.value,
+      date: dateInput.value,
+      startTime: startTimeInput.value,
+      endTime: endTimeInput.value,
+      location: locationInput.value,
+      attendees: attendeesInput.value.split(',').map(email => email.trim()).filter(Boolean),
+      description: ''
+    };
+
+    try {
+      // First ensure we have authentication
+      const response = await chrome.runtime.sendMessage({
+        action: 'createEvent',
+        eventDetails
+      });
+
+      if (response.success) {
+        showSuccessScreen();
+      } else {
+        throw new Error(response.error || 'Failed to create event');
+      }
+    } catch (error) {
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'error-message visible';
+      errorDiv.style.marginBottom = '16px';
+      errorDiv.textContent = error.message;
+      document.querySelector('.button-row').insertAdjacentElement('beforebegin', errorDiv);
+    }
+  });
+
+  // Handle back to home
+  backToHomeButton.addEventListener('click', () => {
+    window.parent.postMessage({ action: 'closeModal' }, '*');
+  });
+
+  function showSuccessScreen() {
+    formScreen.classList.add('hidden');
+    successScreen.classList.add('active');
+  }
 });
