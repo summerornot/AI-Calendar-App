@@ -4,15 +4,15 @@ chrome.runtime.onInstalled.addListener(() => {
   
   // Create context menu item
   chrome.contextMenus.create({
-    id: "addToCalendar",
-    title: "Add to Calendar",
-    contexts: ["selection"],
+    id: 'addToCalendar',
+    title: 'Add to Calendar',
+    contexts: ['selection']
   });
 });
 
 // Handle context menu click
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === "addToCalendar") {
+  if (info.menuItemId === 'addToCalendar') {
     try {
       // Process the selected text
       const response = await fetch('https://ai-calendar-assistant.onrender.com/process_event', {
@@ -33,7 +33,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       await chrome.storage.local.set({ pendingEvent: eventDetails });
 
       // Show modal in the current tab
-      chrome.tabs.sendMessage(tab.id, { action: 'showModal' });
+      await chrome.tabs.sendMessage(tab.id, { action: 'showModal' });
+
     } catch (error) {
       console.error('Error:', error);
       // Show error notification
@@ -41,7 +42,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         type: 'basic',
         iconUrl: 'icons/icon48.png',
         title: 'Error',
-        message: 'Failed to process event details. Please try again.'
+        message: error.message || 'Failed to process event details. Please try again.'
       });
     }
   }
@@ -101,7 +102,8 @@ async function createCalendarEvent(eventDetails) {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to create calendar event');
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || 'Failed to create calendar event');
     }
 
     return { success: true };
