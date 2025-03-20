@@ -10,7 +10,8 @@
     "identity"
   ],
   "host_permissions": [
-    "https://*.onrender.com/*"
+    "https://*.onrender.com/*",
+    "https://www.googleapis.com/*"
   ],
   "oauth2": {
     "client_id": "905368676199-hjjsvonnocaurmn7lkml4fudq1fmg5fs.apps.googleusercontent.com",
