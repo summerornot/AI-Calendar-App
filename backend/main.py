@@ -42,19 +42,26 @@ def extract_event_details(text: str) -> dict:
     try:
         print(f"Processing text: {text}")  # Debug log
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": """Extract event details from the text. Return a JSON object with:
-                - title: Event title/description
-                - date: Date in YYYY-MM-DD format (assume current year if not specified)
-                - startTime: Start time in HH:MM format (24-hour)
-                - endTime: End time in HH:MM format (24-hour), if not specified assume 1 hour after start time
-                - location: Location if specified (or null)
+                {"role": "system", "content": """You are a helpful assistant that extracts event details from text. 
+                Extract the following details and format them exactly as shown in the example:
+                {
+                    "title": "Event title/description",
+                    "date": "YYYY-MM-DD",
+                    "startTime": "HH:MM",
+                    "endTime": "HH:MM",
+                    "location": "location or null"
+                }
                 
-                If a detail is not found or unclear, return null for that field."""},
+                Rules:
+                - For date, use YYYY-MM-DD format. If no year specified, use current year
+                - For times, use 24-hour HH:MM format
+                - If end time not specified, set it to 1 hour after start time
+                - If a detail is not found, use null
+                - Return ONLY the JSON object, no other text"""},
                 {"role": "user", "content": text}
-            ],
-            response_format={ "type": "json_object" }
+            ]
         )
         
         result = json.loads(response.choices[0].message.content)
