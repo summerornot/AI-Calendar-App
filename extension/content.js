@@ -31,17 +31,19 @@ function createModal() {
       background: white;
       border-radius: 8px;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      width: 400px;
-      height: 600px;
-      max-width: 90vw;
-      max-height: 90vh;
+      width: 500px;
+      height: 700px;
+      max-width: 95vw;
+      max-height: 95vh;
       overflow: hidden;
+      position: relative;
     }
 
     #ai-calendar-modal iframe {
       width: 100%;
       height: 100%;
       border: none;
+      overflow-y: auto;
     }
   `;
   document.head.appendChild(style);
