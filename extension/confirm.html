@@ -11,25 +11,33 @@
     
     <div class="form-group">
       <label>Title</label>
-      <input type="text" id="title" class="form-input">
+      <input type="text" id="title" class="form-input" required>
+      <div class="error-message">Title is required</div>
     </div>
 
     <div class="form-row">
       <div class="form-group">
         <label>Date</label>
-        <input type="date" id="date" class="form-input">
+        <input type="date" id="date" class="form-input" required>
+        <div class="error-message">Date is required</div>
       </div>
     </div>
 
     <div class="form-row">
       <div class="form-group">
         <label>Start Time</label>
-        <input type="time" id="start-time" class="form-input">
+        <input type="time" id="start-time" class="form-input" required>
+        <div class="error-message">Start time is required</div>
       </div>
       <div class="form-group">
         <label>End Time</label>
-        <input type="time" id="end-time" class="form-input">
+        <input type="time" id="end-time" class="form-input" required>
+        <div class="error-message">End time is required</div>
       </div>
+    </div>
+
+    <div class="warning-message" id="past-date-warning" style="display: none;">
+      Please note, this event occurs in the past. If this is a mistake, simply update the date/time here.
     </div>
 
     <div class="form-group">

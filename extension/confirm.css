@@ -68,6 +68,16 @@ label {
   border-color: #EA4335;
 }
 
+.form-input.required {
+  border-color: #EA4335;
+  background-color: #FEF2F2;
+}
+
+.form-input:invalid {
+  border-color: #EA4335;
+  background-color: #FEF2F2;
+}
+
 .button-row {
   display: flex;
   justify-content: flex-end;
@@ -118,5 +128,20 @@ input:-webkit-autofill {
 }
 
 .error-message.visible {
+  display: block;
+}
+
+.warning-message {
+  background-color: #FEF7E0;
+  border: 1px solid #FBE5C0;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+  color: #B45309;
+  font-size: 14px;
+  display: none;
+}
+
+.warning-message.visible {
   display: block;
 }
