@@ -10,6 +10,59 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// Check if user is authenticated
+async function checkAuth() {
+  try {
+    const token = await chrome.identity.getAuthToken({ interactive: true });
+    return token;
+  } catch (error) {
+    console.error('Authentication error:', error);
+    return null;
+  }
+}
+
+// Create calendar event using Google Calendar API
+async function createCalendarEvent(eventDetails) {
+  try {
+    const token = await checkAuth();
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+
+    const event = {
+      summary: eventDetails.title,
+      location: eventDetails.location,
+      start: {
+        dateTime: `${eventDetails.date}T${eventDetails.startTime}:00`,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      },
+      end: {
+        dateTime: `${eventDetails.date}T${eventDetails.endTime}:00`,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      }
+    };
+
+    const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(event)
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create event');
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error creating event:', error);
+    throw error;
+  }
+}
+
 // Handle context menu click
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "addToCalendar") {
@@ -18,10 +71,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       chrome.action.setBadgeText({ text: "..." });
       chrome.action.setBadgeBackgroundColor({ color: "#F4B400" });
 
-      console.log('Selected text:', info.selectionText);  // Debug log
-
-      // Process the event
-      const response = await fetch('http://localhost:8000/process_event', {
+      // Process the event using our backend
+      const response = await fetch('https://ai-calendar-app.onrender.com/process_event', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -30,41 +81,26 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Process event error:', errorText);  // Debug log
-        throw new Error('Failed to process event: ' + errorText);
+        throw new Error('Failed to process event');
       }
 
-      const eventData = await response.json();
-      console.log('Event data:', eventData);  // Debug log
-
-      // Create the event
-      const createResponse = await fetch('http://localhost:8000/create_event', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(eventData)
-      });
-
-      if (!createResponse.ok) {
-        const errorText = await createResponse.text();
-        console.error('Create event error:', errorText);  // Debug log
-        throw new Error('Failed to create event: ' + errorText);
-      }
+      const eventDetails = await response.json();
+      
+      // Create event in user's calendar
+      const calendarEvent = await createCalendarEvent(eventDetails);
 
       // Show success badge
-      chrome.action.setBadgeText({ text: "" });
+      chrome.action.setBadgeText({ text: "✓" });
       chrome.action.setBadgeBackgroundColor({ color: "#1e8e3e" });
 
       // Store event details for popup
       chrome.storage.local.set({
         'lastEvent': {
           status: 'success',
-          title: eventData.title,
-          date: eventData.date,
-          time: eventData.startTime,
-          location: eventData.location || ''
+          title: eventDetails.title,
+          date: eventDetails.date,
+          time: eventDetails.startTime,
+          location: eventDetails.location || ''
         }
       });
 
@@ -72,7 +108,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       console.error('Error:', error);
       
       // Show error badge
-      chrome.action.setBadgeText({ text: "" });
+      chrome.action.setBadgeText({ text: "!" });
       chrome.action.setBadgeBackgroundColor({ color: "#EA4335" });
 
       // Store error for popup

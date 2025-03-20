@@ -7,12 +7,17 @@
     "contextMenus",
     "storage",
     "action",
+    "identity",
     "tabs",
     "notifications"
   ],
   "host_permissions": [
     "https://*.onrender.com/*"
   ],
+  "oauth2": {
+    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/calendar"]
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -31,5 +36,6 @@
     }
   },
   "author": "Your Name",
-  "homepage_url": "https://github.com/yourusername/ai-calendar-extension"
+  "homepage_url": "https://github.com/yourusername/ai-calendar-extension",
+  "key": "YOUR_EXTENSION_KEY"
 }
