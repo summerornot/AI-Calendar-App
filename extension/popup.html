@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Calendar Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Funnel+Display&display=swap" rel="stylesheet">
+  <style>
+    body {
+      width: 300px;
+      padding: 20px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: white;
+      margin: 0;
+    }
+    .container {
+      text-align: center;
+    }
+    .status {
+      margin: 15px 0;
+      font-size: 16px;
+      font-weight: 500;
+    }
+    .success {
+      color: #1e8e3e;
+    }
+    .error {
+      color: #EA4335;
+    }
+    .details {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #5f6368;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="status" class="status">Select text and right-click to add events</div>
+    <div id="details" class="details"></div>
+  </div>
+
+  <script>
+    // Check for last event status
+    chrome.storage.local.get(['lastEvent'], function(result) {
+      const statusDiv = document.getElementById('status');
+      const detailsDiv = document.getElementById('details');
+      
+      if (result.lastEvent) {
+        const event = result.lastEvent;
+        
+        if (event.status === 'success') {
+          statusDiv.className = 'status success';
+          statusDiv.textContent = '✓ Event Added Successfully';
+          
+          const details = [
+            `Title: ${event.title}`,
+            `Date: ${event.date}`,
+            `Time: ${event.time}`
+          ];
+          
+          if (event.location) {
+            details.push(`Location: ${event.location}`);
+          }
+          
+          detailsDiv.textContent = details.join('\n');
+        } else {
+          statusDiv.className = 'status error';
+          statusDiv.textContent = '❌ Failed to Add Event';
+          detailsDiv.textContent = event.message || 'Please try again';
+        }
+      }
+    });
+  </script>
+</body>
+</html>
