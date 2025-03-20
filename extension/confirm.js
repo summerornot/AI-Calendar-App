@@ -86,6 +86,11 @@ document.addEventListener('DOMContentLoaded', function() {
   function showSuccessScreen() {
     formScreen.classList.add('hidden');
     successScreen.classList.add('active');
+    
+    // Auto-close after 2 seconds
+    setTimeout(() => {
+      window.parent.postMessage({ action: 'closeModal' }, '*');
+    }, 2000);
   }
 
   function formatDate(dateString) {
