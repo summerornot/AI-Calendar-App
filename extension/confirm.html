@@ -2,34 +2,45 @@
 <html>
 <head>
   <title>Confirm Event Details</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <style>
     body {
       font-family: 'Google Sans', Arial, sans-serif;
       margin: 0;
-      padding: 20px;
+      padding: 0;
       color: #3c4043;
-      max-width: 400px;
+      max-width: 500px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .content {
+      padding: 24px;
+      flex: 1;
+      overflow-y: auto;
     }
 
     .header {
-      margin-bottom: 16px;
+      margin-bottom: 24px;
     }
 
     h1 {
-      font-size: 18px;
+      font-size: 24px;
       font-weight: 400;
       margin: 0;
       color: #202124;
     }
 
     .form-group {
-      margin-bottom: 12px;
+      margin-bottom: 20px;
+      position: relative;
     }
 
     label {
       display: block;
-      margin-bottom: 4px;
-      font-size: 13px;
+      margin-bottom: 8px;
+      font-size: 14px;
       color: #5f6368;
     }
 
@@ -38,12 +49,11 @@
     input[type="time"],
     textarea {
       width: 100%;
-      padding: 6px 8px;
+      padding: 8px 12px;
       border: 1px solid #dadce0;
       border-radius: 4px;
       font-size: 14px;
       box-sizing: border-box;
-      background: white;
     }
 
     input[type="text"]:focus,
@@ -54,28 +64,29 @@
       border-color: #1a73e8;
     }
 
-    .time-row {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-
-    .time-row .form-group {
-      flex: 1;
-      margin-bottom: 0;
+    .icon {
+      color: #5f6368;
+      vertical-align: middle;
+      margin-right: 8px;
+      font-size: 20px;
     }
 
     .buttons {
       display: flex;
       justify-content: flex-end;
-      gap: 8px;
-      margin-top: 16px;
-      padding-top: 12px;
+      gap: 12px;
+      padding: 16px 24px;
+      background: white;
       border-top: 1px solid #dadce0;
+      position: sticky;
+      bottom: 0;
+      right: 0;
+      left: 0;
+      z-index: 1;
     }
 
     button {
-      padding: 6px 16px;
+      padding: 8px 24px;
       border-radius: 4px;
       font-size: 14px;
       font-weight: 500;
@@ -108,137 +119,111 @@
       display: none;
     }
 
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 16px;
+    }
+
+    .form-row .form-group {
+      flex: 1;
+    }
+
     .past-date-warning {
       background: #fce8e6;
       color: #d93025;
-      padding: 6px 8px;
+      padding: 8px 12px;
       border-radius: 4px;
-      font-size: 12px;
-      margin-bottom: 12px;
-      display: none;
-    }
-
-    .more-options {
-      margin-top: 8px;
-    }
-
-    .more-options-toggle {
-      background: none;
-      border: none;
-      color: #1a73e8;
       font-size: 13px;
-      padding: 4px 0;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .more-options-toggle:hover {
-      text-decoration: underline;
-    }
-
-    .more-options-content {
+      margin-bottom: 16px;
       display: none;
-      margin-top: 12px;
-    }
-
-    .more-options-content.show {
-      display: block;
-    }
-
-    .arrow {
-      width: 0;
-      height: 0;
-      border-left: 4px solid transparent;
-      border-right: 4px solid transparent;
-      border-top: 4px solid #1a73e8;
-      transition: transform 0.2s;
-      margin-top: 2px;
-    }
-
-    .more-options-toggle[aria-expanded="true"] .arrow {
-      transform: rotate(180deg);
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Confirm event details</h1>
-  </div>
-
-  <div class="past-date-warning" id="pastDateWarning">
-    This event is scheduled in the past
-  </div>
-
-  <form id="eventForm">
-    <div class="form-group">
-      <label for="title">Title</label>
-      <input type="text" id="title" required>
-      <div class="error" id="titleError">Please enter a title</div>
+  <div class="content">
+    <div class="header">
+      <h1>Confirm event details</h1>
     </div>
 
-    <div class="form-group">
-      <label for="date">Date</label>
-      <input type="date" id="date" required>
-      <div class="error" id="dateError">Please select a valid date</div>
+    <div class="past-date-warning" id="pastDateWarning">
+      This event is scheduled in the past
     </div>
 
-    <div class="time-row">
+    <form id="eventForm">
       <div class="form-group">
-        <label for="startTime">Start</label>
-        <input type="time" id="startTime" required>
-        <div class="error" id="startTimeError">Required</div>
+        <label>
+          <i class="material-icons icon">event_note</i>
+          Title
+        </label>
+        <input type="text" id="title" required>
+        <div class="error" id="titleError">Please enter a title</div>
       </div>
 
       <div class="form-group">
-        <label for="endTime">End</label>
-        <input type="time" id="endTime">
-        <div class="error" id="endTimeError">Must be after start</div>
+        <label>
+          <i class="material-icons icon">event</i>
+          Date
+        </label>
+        <input type="date" id="date" required>
+        <div class="error" id="dateError">Please select a valid date</div>
       </div>
-    </div>
 
-    <div class="more-options">
-      <button type="button" class="more-options-toggle" aria-expanded="false" id="moreOptionsToggle">
-        More options
-        <span class="arrow"></span>
-      </button>
-      
-      <div class="more-options-content" id="moreOptionsContent">
+      <div class="form-row">
         <div class="form-group">
-          <label for="location">Location</label>
-          <input type="text" id="location">
+          <label>
+            <i class="material-icons icon">schedule</i>
+            Start Time
+          </label>
+          <input type="time" id="startTime" required>
+          <div class="error" id="startTimeError">Please select a start time</div>
         </div>
 
         <div class="form-group">
-          <label for="attendees">Guests</label>
-          <input type="text" id="attendees" placeholder="email1@example.com, email2@example.com">
-        </div>
-
-        <div class="form-group">
-          <label for="description">Description</label>
-          <textarea id="description" rows="2"></textarea>
+          <label>
+            <i class="material-icons icon">schedule</i>
+            End Time
+          </label>
+          <input type="time" id="endTime">
+          <div class="error" id="endTimeError">End time must be after start time</div>
         </div>
       </div>
-    </div>
 
-    <div class="buttons">
-      <button type="button" class="cancel" id="cancelButton">Cancel</button>
-      <button type="submit" class="add">Add to Calendar</button>
-    </div>
-  </form>
+      <div class="form-group">
+        <label>
+          <i class="material-icons icon">location_on</i>
+          Location
+        </label>
+        <input type="text" id="location">
+      </div>
 
-  <script>
-    // Handle more options toggle
-    const moreOptionsToggle = document.getElementById('moreOptionsToggle');
-    const moreOptionsContent = document.getElementById('moreOptionsContent');
+      <div class="form-group">
+        <label>
+          <i class="material-icons icon">people</i>
+          Guests (separate emails with commas)
+        </label>
+        <input type="text" id="attendees">
+      </div>
 
-    moreOptionsToggle.addEventListener('click', () => {
-      const isExpanded = moreOptionsToggle.getAttribute('aria-expanded') === 'true';
-      moreOptionsToggle.setAttribute('aria-expanded', !isExpanded);
-      moreOptionsContent.classList.toggle('show');
-    });
-  </script>
+      <div class="form-group">
+        <label>
+          <i class="material-icons icon">description</i>
+          Description
+        </label>
+        <textarea id="description"></textarea>
+      </div>
+    </form>
+  </div>
+
+  <div class="buttons">
+    <button type="button" class="cancel" id="cancelButton">Cancel</button>
+    <button type="submit" class="add" form="eventForm">Add to Calendar</button>
+  </div>
+
   <script src="confirm.js"></script>
 </body>
 </html>
