@@ -111,7 +111,8 @@ document.getElementById('save').addEventListener('click', async () => {
     eventDetails: eventDetails
   }, (response) => {
     if (response.success) {
-      window.close();
+      // Close modal via parent window
+      window.parent.postMessage({ action: 'closeModal' }, '*');
     } else {
       // Show error in UI
       const errorDiv = document.createElement('div');
@@ -125,5 +126,5 @@ document.getElementById('save').addEventListener('click', async () => {
 
 // Handle cancel button
 document.getElementById('cancel').addEventListener('click', () => {
-  window.close();
+  window.parent.postMessage({ action: 'closeModal' }, '*');
 });

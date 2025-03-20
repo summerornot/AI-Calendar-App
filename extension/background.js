@@ -10,6 +10,107 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// Handle context menu click
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === "addToCalendar") {
+    try {
+      // Process the selected text
+      const response = await fetch('https://ai-calendar-assistant.onrender.com/process_event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: info.selectionText })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process event details');
+      }
+
+      const eventDetails = await response.json();
+      
+      // Store event details for the confirmation popup
+      await chrome.storage.local.set({ pendingEvent: eventDetails });
+
+      // Show modal in the current tab
+      chrome.tabs.sendMessage(tab.id, { action: 'showModal' });
+    } catch (error) {
+      console.error('Error:', error);
+      // Show error notification
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icons/icon48.png',
+        title: 'Error',
+        message: 'Failed to process event details. Please try again.'
+      });
+    }
+  }
+});
+
+// Handle messages from confirmation popup
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'createEvent') {
+    createCalendarEvent(request.eventDetails)
+      .then(response => {
+        if (response.success) {
+          // Close the modal
+          chrome.tabs.sendMessage(sender.tab.id, { action: 'closeModal' });
+        }
+        sendResponse(response);
+      })
+      .catch(error => {
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+});
+
+// Create calendar event
+async function createCalendarEvent(eventDetails) {
+  try {
+    // Get OAuth token
+    const token = await chrome.identity.getAuthToken({ interactive: true });
+    if (!token) {
+      throw new Error('Failed to get authentication token');
+    }
+
+    // Format date and time
+    const startDateTime = `${eventDetails.date}T${eventDetails.startTime}:00`;
+    const endDateTime = `${eventDetails.date}T${eventDetails.endTime}:00`;
+
+    // Create event
+    const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        summary: eventDetails.title,
+        location: eventDetails.location,
+        start: {
+          dateTime: startDateTime,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        },
+        end: {
+          dateTime: endDateTime,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        },
+        attendees: eventDetails.attendees
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create calendar event');
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error creating calendar event:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 // Check if user is authenticated
 async function checkAuth() {
   try {
@@ -41,7 +142,7 @@ async function checkAuth() {
 }
 
 // Create calendar event using Google Calendar API
-async function createCalendarEvent(eventDetails) {
+async function createCalendarEventUsingGoogleAPI(eventDetails) {
   try {
     const authResult = await checkAuth();
     if (!authResult) {
@@ -66,7 +167,7 @@ async function createCalendarEvent(eventDetails) {
     const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${authResult.token}`,
+        'Authorization': `Bearer ${authResult}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(event)
@@ -85,103 +186,3 @@ async function createCalendarEvent(eventDetails) {
     throw error;
   }
 }
-
-// Handle context menu click
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === "addToCalendar") {
-    try {
-      // Update badge to show processing
-      chrome.action.setBadgeText({ text: "..." });
-      chrome.action.setBadgeBackgroundColor({ color: "#F4B400" });
-
-      // Process the event using our backend
-      const response = await fetch('https://ai-calendar-app.onrender.com/process_event', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text: info.selectionText })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Backend error:', errorText);
-        throw new Error(`Failed to process event: ${errorText}`);
-      }
-
-      const eventDetails = await response.json();
-      
-      // Store event details for confirmation popup
-      chrome.storage.local.set({ 'pendingEvent': eventDetails });
-
-      // Open confirmation popup
-      chrome.windows.create({
-        url: 'confirm.html',
-        type: 'popup',
-        width: 450,
-        height: 600
-      });
-
-      // Clear badge
-      chrome.action.setBadgeText({ text: "" });
-
-    } catch (error) {
-      console.error('Error:', error);
-      
-      // Show error badge
-      chrome.action.setBadgeText({ text: "!" });
-      chrome.action.setBadgeBackgroundColor({ color: "#EA4335" });
-
-      // Store error for popup
-      chrome.storage.local.set({
-        'lastEvent': {
-          status: 'error',
-          message: error.message
-        }
-      });
-    }
-  }
-});
-
-// Listen for messages from confirmation popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'createEvent') {
-    createCalendarEvent(request.eventDetails)
-      .then(() => {
-        // Show success badge
-        chrome.action.setBadgeText({ text: "✓" });
-        chrome.action.setBadgeBackgroundColor({ color: "#1e8e3e" });
-        
-        // Store event details for popup
-        chrome.storage.local.set({
-          'lastEvent': {
-            status: 'success',
-            title: request.eventDetails.title,
-            date: request.eventDetails.date,
-            time: request.eventDetails.startTime,
-            location: request.eventDetails.location || ''
-          }
-        });
-
-        sendResponse({ success: true });
-      })
-      .catch(error => {
-        console.error('Error creating event:', error);
-        
-        // Show error badge
-        chrome.action.setBadgeText({ text: "!" });
-        chrome.action.setBadgeBackgroundColor({ color: "#EA4335" });
-
-        // Store error for popup
-        chrome.storage.local.set({
-          'lastEvent': {
-            status: 'error',
-            message: error.message
-          }
-        });
-
-        sendResponse({ success: false, error: error.message });
-      });
-    return true; // Keep the message channel open for async response
-  }
-});
