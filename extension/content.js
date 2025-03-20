@@ -30,9 +30,9 @@ function createModal() {
     #ai-calendar-modal .modal-content {
       background: white;
       border-radius: 8px;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      width: 500px;
-      height: 700px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      width: 400px;
+      height: auto;
       max-width: 95vw;
       max-height: 95vh;
       overflow: hidden;
@@ -41,7 +41,7 @@ function createModal() {
 
     #ai-calendar-modal iframe {
       width: 100%;
-      height: 100%;
+      height: 520px;
       border: none;
       overflow-y: auto;
     }
