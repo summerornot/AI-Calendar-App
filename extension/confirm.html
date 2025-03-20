@@ -6,24 +6,24 @@
     body {
       font-family: 'Google Sans', Arial, sans-serif;
       margin: 0;
-      padding: 24px;
+      padding: 20px;
       color: #3c4043;
       max-width: 400px;
     }
 
     .header {
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
 
     h1 {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 400;
       margin: 0;
       color: #202124;
     }
 
     .form-group {
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
 
     label {
@@ -38,7 +38,7 @@
     input[type="time"],
     textarea {
       width: 100%;
-      padding: 8px;
+      padding: 6px 8px;
       border: 1px solid #dadce0;
       border-radius: 4px;
       font-size: 14px;
@@ -57,7 +57,7 @@
     .time-row {
       display: flex;
       gap: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
 
     .time-row .form-group {
@@ -69,13 +69,13 @@
       display: flex;
       justify-content: flex-end;
       gap: 8px;
-      margin-top: 24px;
+      margin-top: 16px;
+      padding-top: 12px;
       border-top: 1px solid #dadce0;
-      padding-top: 16px;
     }
 
     button {
-      padding: 8px 16px;
+      padding: 6px 16px;
       border-radius: 4px;
       font-size: 14px;
       font-weight: 500;
@@ -108,25 +108,57 @@
       display: none;
     }
 
-    textarea {
-      min-height: 60px;
-      resize: vertical;
-    }
-
     .past-date-warning {
       background: #fce8e6;
       color: #d93025;
-      padding: 8px 12px;
+      padding: 6px 8px;
       border-radius: 4px;
-      font-size: 13px;
-      margin-bottom: 16px;
+      font-size: 12px;
+      margin-bottom: 12px;
       display: none;
     }
 
-    .optional {
-      color: #5f6368;
-      font-size: 12px;
-      margin-left: 4px;
+    .more-options {
+      margin-top: 8px;
+    }
+
+    .more-options-toggle {
+      background: none;
+      border: none;
+      color: #1a73e8;
+      font-size: 13px;
+      padding: 4px 0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .more-options-toggle:hover {
+      text-decoration: underline;
+    }
+
+    .more-options-content {
+      display: none;
+      margin-top: 12px;
+    }
+
+    .more-options-content.show {
+      display: block;
+    }
+
+    .arrow {
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 4px solid #1a73e8;
+      transition: transform 0.2s;
+      margin-top: 2px;
+    }
+
+    .more-options-toggle[aria-expanded="true"] .arrow {
+      transform: rotate(180deg);
     }
   </style>
 </head>
@@ -154,31 +186,40 @@
 
     <div class="time-row">
       <div class="form-group">
-        <label for="startTime">Start time</label>
+        <label for="startTime">Start</label>
         <input type="time" id="startTime" required>
-        <div class="error" id="startTimeError">Please select a start time</div>
+        <div class="error" id="startTimeError">Required</div>
       </div>
 
       <div class="form-group">
-        <label for="endTime">End time</label>
+        <label for="endTime">End</label>
         <input type="time" id="endTime">
-        <div class="error" id="endTimeError">End time must be after start time</div>
+        <div class="error" id="endTimeError">Must be after start</div>
       </div>
     </div>
 
-    <div class="form-group">
-      <label for="location">Location <span class="optional">(optional)</span></label>
-      <input type="text" id="location">
-    </div>
+    <div class="more-options">
+      <button type="button" class="more-options-toggle" aria-expanded="false" id="moreOptionsToggle">
+        More options
+        <span class="arrow"></span>
+      </button>
+      
+      <div class="more-options-content" id="moreOptionsContent">
+        <div class="form-group">
+          <label for="location">Location</label>
+          <input type="text" id="location">
+        </div>
 
-    <div class="form-group">
-      <label for="attendees">Guests <span class="optional">(optional)</span></label>
-      <input type="text" id="attendees" placeholder="email1@example.com, email2@example.com">
-    </div>
+        <div class="form-group">
+          <label for="attendees">Guests</label>
+          <input type="text" id="attendees" placeholder="email1@example.com, email2@example.com">
+        </div>
 
-    <div class="form-group">
-      <label for="description">Description <span class="optional">(optional)</span></label>
-      <textarea id="description"></textarea>
+        <div class="form-group">
+          <label for="description">Description</label>
+          <textarea id="description" rows="2"></textarea>
+        </div>
+      </div>
     </div>
 
     <div class="buttons">
@@ -187,6 +228,17 @@
     </div>
   </form>
 
+  <script>
+    // Handle more options toggle
+    const moreOptionsToggle = document.getElementById('moreOptionsToggle');
+    const moreOptionsContent = document.getElementById('moreOptionsContent');
+
+    moreOptionsToggle.addEventListener('click', () => {
+      const isExpanded = moreOptionsToggle.getAttribute('aria-expanded') === 'true';
+      moreOptionsToggle.setAttribute('aria-expanded', !isExpanded);
+      moreOptionsContent.classList.toggle('show');
+    });
+  </script>
   <script src="confirm.js"></script>
 </body>
 </html>
