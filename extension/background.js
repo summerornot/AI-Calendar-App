@@ -40,9 +40,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       await chrome.storage.local.set({ pendingEvent: eventDetails });
       console.log('Stored event details in local storage');
 
-      // Show modal in the current tab
-      await chrome.tabs.sendMessage(tab.id, { action: 'showModal' });
-      console.log('Sent showModal message to content script');
+      // Try to show modal using content script
+      try {
+        await chrome.tabs.sendMessage(tab.id, { action: 'showModal' });
+      } catch (error) {
+        console.log('Content script not ready, injecting it...');
+        // If content script is not ready, inject it
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js']
+        });
+        // Try showing modal again
+        await chrome.tabs.sendMessage(tab.id, { action: 'showModal' });
+      }
 
     } catch (error) {
       console.error('Detailed error:', {
@@ -95,7 +105,10 @@ async function createCalendarEvent(eventDetails) {
 
     // Format date and time
     const startDateTime = `${eventDetails.date}T${eventDetails.startTime}:00`;
-    const endDateTime = `${eventDetails.date}T${eventDetails.endTime}:00`;
+    const endDateTime = eventDetails.endTime ? 
+      `${eventDetails.date}T${eventDetails.endTime}:00` :
+      `${eventDetails.date}T${eventDetails.startTime.split(':')[0]}:59:59`;
+
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     const eventData = {
@@ -109,7 +122,7 @@ async function createCalendarEvent(eventDetails) {
         dateTime: endDateTime,
         timeZone: timeZone
       },
-      attendees: eventDetails.attendees
+      attendees: eventDetails.attendees?.map(email => ({ email })) || []
     };
     console.log('Prepared event data:', eventData);
 
