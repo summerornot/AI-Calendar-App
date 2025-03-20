@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const locationInput = document.getElementById('location');
   const attendeesInput = document.getElementById('guests');
   const cancelButton = document.getElementById('cancel');
+  const descriptionInput = document.getElementById('description');
 
   // Load initial event details
   chrome.storage.local.get('pendingEvent', function(data) {
@@ -24,6 +25,7 @@ document.addEventListener('DOMContentLoaded', function() {
       endTimeInput.value = event.endTime || formatTime(new Date(Date.now() + 3600000)); // 1 hour later
       locationInput.value = event.location || '';
       attendeesInput.value = event.attendees ? event.attendees.join(', ') : '';
+      descriptionInput.value = event.description || '';
     }
   });
 
@@ -63,7 +65,7 @@ document.addEventListener('DOMContentLoaded', function() {
       endTime: endTimeInput.value,
       location: locationInput.value,
       attendees: attendeesInput.value.split(',').map(email => email.trim()).filter(Boolean),
-      description: ''
+      description: descriptionInput.value
     };
 
     chrome.runtime.sendMessage({
@@ -84,6 +86,50 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   function showSuccessScreen() {
+    // Get current form values
+    const eventDetails = {
+      title: titleInput.value,
+      date: dateInput.value,
+      startTime: startTimeInput.value,
+      endTime: endTimeInput.value,
+      location: locationInput.value,
+      attendees: attendeesInput.value.split(',').map(email => email.trim()).filter(Boolean),
+      description: descriptionInput.value
+    };
+
+    // Update confirmation screen
+    document.getElementById('confirmTitle').textContent = eventDetails.title;
+    document.getElementById('confirmDateTime').textContent = `${eventDetails.date}, ${eventDetails.startTime} - ${eventDetails.endTime}`;
+    
+    // Handle optional fields
+    const locationContainer = document.getElementById('confirmLocationContainer');
+    const locationText = document.getElementById('confirmLocation');
+    if (eventDetails.location) {
+      locationText.textContent = eventDetails.location;
+      locationContainer.classList.remove('empty');
+    } else {
+      locationContainer.classList.add('empty');
+    }
+
+    const attendeesContainer = document.getElementById('confirmAttendeesContainer');
+    const attendeesText = document.getElementById('confirmAttendees');
+    if (eventDetails.attendees.length > 0) {
+      attendeesText.textContent = eventDetails.attendees.join(', ');
+      attendeesContainer.classList.remove('empty');
+    } else {
+      attendeesContainer.classList.add('empty');
+    }
+
+    const descriptionContainer = document.getElementById('confirmDescriptionContainer');
+    const descriptionText = document.getElementById('confirmDescription');
+    if (eventDetails.description) {
+      descriptionText.textContent = eventDetails.description;
+      descriptionContainer.classList.remove('empty');
+    } else {
+      descriptionContainer.classList.add('empty');
+    }
+
+    // Show success screen
     formScreen.classList.add('hidden');
     successScreen.classList.add('active');
     
