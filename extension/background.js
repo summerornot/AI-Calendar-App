@@ -80,6 +80,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (response.success) {
           // Close the modal
           chrome.tabs.sendMessage(sender.tab.id, { action: 'closeModal' });
+          // Show success notification
+          chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'icons/icon48.png',
+            title: 'Success',
+            message: 'Event added to calendar'
+          });
         }
         sendResponse(response);
       })
@@ -97,7 +104,15 @@ async function createCalendarEvent(eventDetails) {
     console.log('Creating calendar event with details:', eventDetails);
 
     // Get OAuth token
-    const token = await chrome.identity.getAuthToken({ interactive: true });
+    let token;
+    try {
+      const auth = await chrome.identity.getAuthToken({ interactive: true });
+      token = auth.token;
+    } catch (error) {
+      console.error('Auth error:', error);
+      throw new Error('Please sign in to your Google account to add events to calendar');
+    }
+
     if (!token) {
       throw new Error('Failed to get authentication token');
     }
@@ -114,6 +129,7 @@ async function createCalendarEvent(eventDetails) {
     const eventData = {
       summary: eventDetails.title,
       location: eventDetails.location,
+      description: eventDetails.description,
       start: {
         dateTime: startDateTime,
         timeZone: timeZone
@@ -141,6 +157,11 @@ async function createCalendarEvent(eventDetails) {
     console.log('Calendar API response:', responseData);
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Token expired, remove it and try again
+        await chrome.identity.removeCachedAuthToken({ token });
+        return createCalendarEvent(eventDetails);
+      }
       throw new Error(responseData.error?.message || 'Failed to create calendar event');
     }
 
