@@ -7,15 +7,13 @@
     "contextMenus",
     "storage",
     "action",
-    "identity",
-    "tabs",
-    "notifications"
+    "identity"
   ],
   "host_permissions": [
     "https://*.onrender.com/*"
   ],
   "oauth2": {
-    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "905368676199-hjjsvonnocaurmn7lkml4fudq1fmg5fs.apps.googleusercontent.com",
     "scopes": ["https://www.googleapis.com/auth/calendar"]
   },
   "background": {
@@ -34,8 +32,5 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
-  },
-  "author": "Your Name",
-  "homepage_url": "https://github.com/yourusername/ai-calendar-extension",
-  "key": "YOUR_EXTENSION_KEY"
+  }
 }

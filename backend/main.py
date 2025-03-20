@@ -24,7 +24,10 @@ app.add_middleware(
 )
 
 # Initialize OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise Exception("OPENAI_API_KEY not found in environment variables")
+client = OpenAI(api_key=api_key)
 
 class EventData(BaseModel):
     text: str
@@ -37,6 +40,7 @@ class EventData(BaseModel):
 def extract_event_details(text: str) -> dict:
     """Extract event details using OpenAI's GPT model"""
     try:
+        print(f"Processing text: {text}")  # Debug log
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
@@ -53,24 +57,29 @@ def extract_event_details(text: str) -> dict:
             response_format={ "type": "json_object" }
         )
         
-        return json.loads(response.choices[0].message.content)
+        result = json.loads(response.choices[0].message.content)
+        print(f"Extracted details: {result}")  # Debug log
+        return result
     except Exception as e:
+        print(f"Error in extract_event_details: {str(e)}")  # Debug log
         raise HTTPException(status_code=500, detail=f"Error processing text: {str(e)}")
 
 @app.post("/process_event")
 async def process_event(event: EventData):
     """Process text and extract event details"""
     try:
-        # Extract event details using GPT
+        print(f"Received event data: {event.dict()}")  # Debug log
         details = extract_event_details(event.text)
+        print(f"Returning details: {details}")  # Debug log
         return details
     except Exception as e:
+        print(f"Error in process_event: {str(e)}")  # Debug log
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy"}
+    return {"status": "healthy", "openai_key_set": bool(os.getenv("OPENAI_API_KEY"))}
 
 if __name__ == "__main__":
     import uvicorn
