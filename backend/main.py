@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import openai
+from openai import OpenAI
 import os
 import json
 from datetime import datetime, timedelta
@@ -13,10 +13,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Initialize OpenAI client
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+if not client.api_key:
     raise Exception("OPENAI_API_KEY not found in environment variables")
-openai.api_key = api_key
 
 class EventRequest(BaseModel):
     text: str
@@ -97,7 +96,7 @@ async def process_event(request: EventRequest):
             "location": "Location or null"
         }"""
 
-        response = await openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_message},
@@ -118,6 +117,7 @@ async def process_event(request: EventRequest):
         return event_details
 
     except Exception as e:
+        print(f"Error processing event: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
