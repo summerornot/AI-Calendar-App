@@ -7,20 +7,16 @@ import json
 from datetime import datetime, timedelta
 import re
 from typing import List, Optional
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-app = FastAPI()
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["chrome-extension://*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Initialize OpenAI client
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise Exception("OPENAI_API_KEY not found in environment variables")
+openai.api_key = api_key
 
 class EventRequest(BaseModel):
     text: str
@@ -33,11 +29,15 @@ class EventResponse(BaseModel):
     location: Optional[str] = None
     attendees: List[str] = []
 
-# Initialize OpenAI client
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise Exception("OPENAI_API_KEY not found in environment variables")
-openai.api_key = api_key
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def extract_emails(text: str) -> List[str]:
     """Extract email addresses from text."""
@@ -97,7 +97,7 @@ async def process_event(request: EventRequest):
             "location": "Location or null"
         }"""
 
-        response = openai.ChatCompletion.create(
+        response = await openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_message},
@@ -122,7 +122,6 @@ async def process_event(request: EventRequest):
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
     return {"status": "healthy", "openai_key_set": bool(os.getenv("OPENAI_API_KEY"))}
 
 if __name__ == "__main__":
