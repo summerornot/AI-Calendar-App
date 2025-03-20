@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Confirm Event Details</title>
+  <link rel="stylesheet" href="confirm.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <h1 id="event-title">Event Details</h1>
+    
+    <div class="form-group">
+      <label>Title</label>
+      <input type="text" id="title" class="form-input">
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="date" class="form-input">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Start Time</label>
+        <input type="time" id="start-time" class="form-input">
+      </div>
+      <div class="form-group">
+        <label>End Time</label>
+        <input type="time" id="end-time" class="form-input">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Location</label>
+      <input type="text" id="location" class="form-input">
+    </div>
+
+    <div class="form-group">
+      <label>Guests (separate emails with commas)</label>
+      <input type="text" id="guests" class="form-input" placeholder="email1@example.com, email2@example.com">
+    </div>
+
+    <div class="button-row">
+      <button id="cancel" class="button button-secondary">Cancel</button>
+      <button id="save" class="button button-primary">Add to Calendar</button>
+    </div>
+  </div>
+  <script src="confirm.js"></script>
+</body>
+</html>
