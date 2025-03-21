@@ -1,7 +1,6 @@
-// Check notification permissions when extension is installed
+// Listen for installation
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Extension installed...');
-  
   // Create context menu item
   chrome.contextMenus.create({
     id: 'addToCalendar',
@@ -10,210 +9,95 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// Handle context menu click
+// Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'addToCalendar') {
+    const selectedText = info.selectionText;
+    console.log('Selected text:', selectedText);
+
     try {
-      console.log('Selected text:', info.selectionText);
-      
-      // Process the selected text
+      // Send text to backend for processing
       const response = await fetch('https://ai-calendar-app.onrender.com/process_event', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ text: info.selectionText })
+        body: JSON.stringify({ text: selectedText })
       });
 
       console.log('Backend response status:', response.status);
-      const responseText = await response.text();
-      console.log('Backend response:', responseText);
+      const data = await response.json();
+      console.log('Backend response:', JSON.stringify(data));
 
-      if (!response.ok) {
-        throw new Error(`Failed to process event details: ${responseText}`);
-      }
-
-      const eventDetails = JSON.parse(responseText);
+      // Store event details
+      const eventDetails = {
+        title: data.title,
+        date: data.date,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        location: data.location,
+        attendees: data.attendees || []
+      };
       console.log('Parsed event details:', eventDetails);
-      
-      // Store event details for the confirmation popup
       await chrome.storage.local.set({ pendingEvent: eventDetails });
       console.log('Stored event details in local storage');
 
-      // Try to show modal using content script
+      // Inject content script and show modal
       try {
-        await chrome.tabs.sendMessage(tab.id, { action: 'showModal' });
-      } catch (error) {
-        console.log('Content script not ready, injecting it...');
-        // If content script is not ready, inject it
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           files: ['content.js']
         });
-        // Try showing modal again
-        await chrome.tabs.sendMessage(tab.id, { action: 'showModal' });
+        console.log('Content script injected successfully');
+      } catch (error) {
+        if (error.message.includes('Cannot access contents of url')) {
+          console.log('Cannot inject content script in this page. Opening in popup instead...');
+          // Open as popup if we can't inject the content script
+          chrome.windows.create({
+            url: 'confirm.html',
+            type: 'popup',
+            width: 400,
+            height: 600
+          });
+          return;
+        }
+        throw error;
       }
 
-    } catch (error) {
-      console.error('Detailed error:', {
-        message: error.message,
-        stack: error.stack,
-        cause: error.cause
-      });
+      // Show the modal
+      await chrome.tabs.sendMessage(tab.id, { action: 'showModal' });
+      console.log('Modal display message sent');
 
-      // Show error notification
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Error',
-        message: error.message || 'Failed to process event details. Please try again.'
+    } catch (error) {
+      console.error('Error:', error);
+      // If there's an error, open in popup
+      chrome.windows.create({
+        url: 'confirm.html',
+        type: 'popup',
+        width: 400,
+        height: 600
       });
     }
   }
 });
 
-// Handle messages from confirmation popup
+// Handle messages from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'createEvent') {
     createCalendarEvent(request.eventDetails)
-      .then(response => {
-        if (response.success) {
-          // Close the modal
-          chrome.tabs.sendMessage(sender.tab.id, { action: 'closeModal' });
-          // Show success notification
-          chrome.notifications.create({
-            type: 'basic',
-            iconUrl: 'icons/icon48.png',
-            title: 'Success',
-            message: 'Event added to calendar'
-          });
-        }
-        sendResponse(response);
-      })
-      .catch(error => {
-        console.error('Calendar event creation error:', error);
-        sendResponse({ success: false, error: error.message });
-      });
-    return true;
+      .then(response => sendResponse(response))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true; // Will respond asynchronously
   }
 });
 
 // Create calendar event
 async function createCalendarEvent(eventDetails) {
   try {
-    console.log('Creating calendar event with details:', eventDetails);
-
     // Get OAuth token
-    let token;
-    try {
-      const auth = await chrome.identity.getAuthToken({ interactive: true });
-      token = auth.token;
-    } catch (error) {
-      console.error('Auth error:', error);
-      throw new Error('Please sign in to your Google account to add events to calendar');
-    }
-
-    if (!token) {
-      throw new Error('Failed to get authentication token');
-    }
-    console.log('Got authentication token');
-
-    // Format date and time
-    const startDateTime = `${eventDetails.date}T${eventDetails.startTime}:00`;
-    const endDateTime = eventDetails.endTime ? 
-      `${eventDetails.date}T${eventDetails.endTime}:00` :
-      `${eventDetails.date}T${eventDetails.startTime.split(':')[0]}:59:59`;
-
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-    const eventData = {
-      summary: eventDetails.title,
-      location: eventDetails.location,
-      description: eventDetails.description,
-      start: {
-        dateTime: startDateTime,
-        timeZone: timeZone
-      },
-      end: {
-        dateTime: endDateTime,
-        timeZone: timeZone
-      },
-      attendees: eventDetails.attendees?.map(email => ({ email })) || []
-    };
-    console.log('Prepared event data:', eventData);
-
-    // Create event
-    const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(eventData)
-    });
-
-    console.log('Calendar API response status:', response.status);
-    const responseData = await response.json();
-    console.log('Calendar API response:', responseData);
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        // Token expired, remove it and try again
-        await chrome.identity.removeCachedAuthToken({ token });
-        return createCalendarEvent(eventDetails);
-      }
-      throw new Error(responseData.error?.message || 'Failed to create calendar event');
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Detailed calendar error:', {
-      message: error.message,
-      stack: error.stack,
-      cause: error.cause
-    });
-    return { success: false, error: error.message };
-  }
-}
-
-// Check if user is authenticated
-async function checkAuth() {
-  try {
-    // First try to get token without interaction
-    let token = await chrome.identity.getAuthToken({ 
-      interactive: false,
-      scopes: ['https://www.googleapis.com/auth/calendar']
-    });
+    const token = await chrome.identity.getAuthToken({ interactive: true });
     
-    if (!token) {
-      console.log('No cached token, trying interactive auth...');
-      // If no token, try interactive auth
-      await chrome.identity.removeCachedAuthToken({ token });
-      token = await chrome.identity.getAuthToken({ 
-        interactive: true,
-        scopes: ['https://www.googleapis.com/auth/calendar']
-      });
-    }
-    
-    return token;
-  } catch (error) {
-    console.error('Authentication error details:', {
-      message: error.message,
-      stack: error.stack,
-      error
-    });
-    return null;
-  }
-}
-
-// Create calendar event using Google Calendar API
-async function createCalendarEventUsingGoogleAPI(eventDetails) {
-  try {
-    const authResult = await checkAuth();
-    if (!authResult) {
-      throw new Error('Not authenticated - no token received');
-    }
-
+    // Format the event for Google Calendar API
     const event = {
       summary: eventDetails.title,
       location: eventDetails.location,
@@ -222,32 +106,43 @@ async function createCalendarEventUsingGoogleAPI(eventDetails) {
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
       },
       end: {
-        dateTime: `${eventDetails.date}T${eventDetails.endTime}:00`,
+        dateTime: eventDetails.endTime 
+          ? `${eventDetails.date}T${eventDetails.endTime}:00`
+          : `${eventDetails.date}T${addOneHour(eventDetails.startTime)}:00`,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-      },
-      attendees: eventDetails.attendees || []
+      }
     };
 
-    console.info('Sending request to Google Calendar API...');
+    if (eventDetails.attendees && eventDetails.attendees.length > 0) {
+      event.attendees = eventDetails.attendees.map(email => ({ email }));
+    }
+
+    // Create event
     const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${authResult}`,
-        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(event)
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Calendar API error:', errorText);
-      throw new Error(`Failed to create event: ${errorText}`);
+      throw new Error('Failed to create calendar event');
     }
 
-    const data = await response.json();
-    return data;
+    return { success: true };
   } catch (error) {
-    console.error('Error creating event:', error);
-    throw error;
+    console.error('Error creating calendar event:', error);
+    return { success: false, error: error.message };
   }
+}
+
+// Helper function to add one hour to time
+function addOneHour(time) {
+  const [hours, minutes] = time.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
+  date.setHours(date.getHours() + 1);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }

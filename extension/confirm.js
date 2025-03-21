@@ -2,40 +2,85 @@ document.addEventListener('DOMContentLoaded', function() {
   const formScreen = document.getElementById('formScreen');
   const successScreen = document.getElementById('successScreen');
   const closeButton = document.getElementById('closeButton');
+  const cancelButton = document.getElementById('cancelButton');
   const addToCalendarButton = document.getElementById('addToCalendar');
-  const backToHomeButton = document.getElementById('backToHome');
 
-  // Get form elements
+  // Form elements
   const titleInput = document.getElementById('title');
   const dateInput = document.getElementById('date');
-  const startTimeInput = document.getElementById('start-time');
-  const endTimeInput = document.getElementById('end-time');
+  const startTimeInput = document.getElementById('startTime');
+  const endTimeInput = document.getElementById('endTime');
   const locationInput = document.getElementById('location');
-  const attendeesInput = document.getElementById('guests');
-  const cancelButton = document.getElementById('cancel');
+  const guestsInput = document.getElementById('guests');
   const descriptionInput = document.getElementById('description');
+
+  // Collapsible fields
+  const collapsibleFields = document.querySelectorAll('.collapsible-field');
+  collapsibleFields.forEach(field => {
+    field.addEventListener('click', function() {
+      const content = this.nextElementSibling;
+      content.classList.add('expanded');
+      this.style.display = 'none';
+    });
+  });
 
   // Load initial event details
   chrome.storage.local.get('pendingEvent', function(data) {
     if (data.pendingEvent) {
       const event = data.pendingEvent;
+      
+      // Set title
       titleInput.value = event.title || '';
+      
+      // Set date
       dateInput.value = formatDate(event.date || new Date());
-      startTimeInput.value = event.startTime || formatTime(new Date());
-      endTimeInput.value = event.endTime || formatTime(new Date(Date.now() + 3600000)); // 1 hour later
-      locationInput.value = event.location || '';
-      attendeesInput.value = event.attendees ? event.attendees.join(', ') : '';
-      descriptionInput.value = event.description || '';
+      
+      // Handle time conversion and setting
+      if (event.startTime) {
+        startTimeInput.value = convertTo12Hour(event.startTime);
+      }
+      
+      // Set end time (1 hour after start time if not provided)
+      if (event.endTime) {
+        endTimeInput.value = convertTo12Hour(event.endTime);
+      } else if (event.startTime) {
+        const endTime = addOneHour(event.startTime);
+        endTimeInput.value = convertTo12Hour(endTime);
+      }
+
+      // Handle optional fields
+      if (event.location) {
+        expandField('locationField');
+        locationInput.value = event.location;
+      }
+      
+      if (event.attendees && event.attendees.length > 0) {
+        expandField('guestsField');
+        guestsInput.value = event.attendees.join(', ');
+      }
+      
+      if (event.description) {
+        expandField('descriptionField');
+        descriptionInput.value = event.description;
+      }
     }
   });
 
-  // Handle date picker click
+  // Close handlers
+  closeButton.addEventListener('click', closeModal);
+  cancelButton.addEventListener('click', closeModal);
+
+  function closeModal() {
+    window.parent.postMessage({ action: 'closeModal' }, '*');
+  }
+
+  // Date picker
   dateInput.addEventListener('click', function(e) {
     e.preventDefault();
     showDatePicker(e.target);
   });
 
-  // Handle time picker clicks
+  // Time pickers
   startTimeInput.addEventListener('click', function(e) {
     e.preventDefault();
     showTimePicker(e.target);
@@ -46,25 +91,15 @@ document.addEventListener('DOMContentLoaded', function() {
     showTimePicker(e.target);
   });
 
-  // Handle close button
-  closeButton.addEventListener('click', function() {
-    window.parent.postMessage({ action: 'closeModal' }, '*');
-  });
-
-  // Handle cancel button
-  cancelButton.addEventListener('click', function() {
-    window.parent.postMessage({ action: 'closeModal' }, '*');
-  });
-
-  // Handle add to calendar
+  // Add to calendar
   addToCalendarButton.addEventListener('click', function() {
     const eventDetails = {
       title: titleInput.value,
       date: dateInput.value,
-      startTime: startTimeInput.value,
-      endTime: endTimeInput.value,
+      startTime: convertTo24Hour(startTimeInput.value),
+      endTime: convertTo24Hour(endTimeInput.value),
       location: locationInput.value,
-      attendees: attendeesInput.value.split(',').map(email => email.trim()).filter(Boolean),
+      attendees: guestsInput.value.split(',').map(email => email.trim()).filter(Boolean),
       description: descriptionInput.value
     };
 
@@ -73,70 +108,81 @@ document.addEventListener('DOMContentLoaded', function() {
       eventDetails: eventDetails
     }, function(response) {
       if (response.success) {
-        showSuccessScreen();
+        showSuccessScreen(eventDetails);
       } else {
         console.error('Failed to create event:', response.error);
       }
     });
   });
 
-  // Handle back to home
-  backToHomeButton.addEventListener('click', function() {
-    window.parent.postMessage({ action: 'closeModal' }, '*');
-  });
-
-  function showSuccessScreen() {
-    // Get current form values
-    const eventDetails = {
-      title: titleInput.value,
-      date: dateInput.value,
-      startTime: startTimeInput.value,
-      endTime: endTimeInput.value,
-      location: locationInput.value,
-      attendees: attendeesInput.value.split(',').map(email => email.trim()).filter(Boolean),
-      description: descriptionInput.value
-    };
-
+  function showSuccessScreen(eventDetails) {
     // Update confirmation screen
     document.getElementById('confirmTitle').textContent = eventDetails.title;
-    document.getElementById('confirmDateTime').textContent = `${eventDetails.date}, ${eventDetails.startTime} - ${eventDetails.endTime}`;
+    document.getElementById('confirmDateTime').textContent = `${formatDate(eventDetails.date)}, ${startTimeInput.value} - ${endTimeInput.value}`;
     
     // Handle optional fields
-    const locationContainer = document.getElementById('confirmLocationContainer');
-    const locationText = document.getElementById('confirmLocation');
-    if (eventDetails.location) {
-      locationText.textContent = eventDetails.location;
-      locationContainer.classList.remove('empty');
-    } else {
-      locationContainer.classList.add('empty');
-    }
-
-    const attendeesContainer = document.getElementById('confirmAttendeesContainer');
-    const attendeesText = document.getElementById('confirmAttendees');
-    if (eventDetails.attendees.length > 0) {
-      attendeesText.textContent = eventDetails.attendees.join(', ');
-      attendeesContainer.classList.remove('empty');
-    } else {
-      attendeesContainer.classList.add('empty');
-    }
-
-    const descriptionContainer = document.getElementById('confirmDescriptionContainer');
-    const descriptionText = document.getElementById('confirmDescription');
-    if (eventDetails.description) {
-      descriptionText.textContent = eventDetails.description;
-      descriptionContainer.classList.remove('empty');
-    } else {
-      descriptionContainer.classList.add('empty');
-    }
+    updateOptionalField('confirmLocationContainer', 'confirmLocation', eventDetails.location);
+    updateOptionalField('confirmAttendeesContainer', 'confirmAttendees', 
+      eventDetails.attendees.length > 0 ? eventDetails.attendees.join(', ') : null);
+    updateOptionalField('confirmDescriptionContainer', 'confirmDescription', eventDetails.description);
 
     // Show success screen
     formScreen.classList.add('hidden');
     successScreen.classList.add('active');
     
     // Auto-close after 2 seconds
-    setTimeout(() => {
-      window.parent.postMessage({ action: 'closeModal' }, '*');
-    }, 2000);
+    setTimeout(closeModal, 2000);
+  }
+
+  // Helper functions
+  function expandField(fieldId) {
+    const field = document.getElementById(fieldId);
+    const trigger = field.querySelector('.collapsible-field');
+    const content = field.querySelector('.collapsible-content');
+    trigger.style.display = 'none';
+    content.classList.add('expanded');
+  }
+
+  function updateOptionalField(containerId, valueId, value) {
+    const container = document.getElementById(containerId);
+    const valueElement = document.getElementById(valueId);
+    if (value) {
+      valueElement.textContent = value;
+      container.classList.remove('empty');
+    } else {
+      container.classList.add('empty');
+    }
+  }
+
+  function convertTo12Hour(time24) {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${ampm}`;
+  }
+
+  function convertTo24Hour(time12) {
+    if (!time12) return '';
+    const [time, period] = time12.split(' ');
+    let [hours, minutes] = time.split(':');
+    hours = parseInt(hours);
+    
+    if (period === 'PM' && hours !== 12) {
+      hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+      hours = 0;
+    }
+    
+    return `${String(hours).padStart(2, '0')}:${minutes}`;
+  }
+
+  function addOneHour(time24) {
+    const [hours, minutes] = time24.split(':');
+    let hour = parseInt(hours);
+    hour = (hour + 1) % 24;
+    return `${String(hour).padStart(2, '0')}:${minutes}`;
   }
 
   function formatDate(dateString) {
@@ -147,14 +193,6 @@ document.addEventListener('DOMContentLoaded', function() {
       day: 'numeric',
       year: 'numeric'
     });
-  }
-
-  function formatTime(date) {
-    return date.toLocaleString('en-US', {
-      hour: 'numeric',
-      minute: 'numeric',
-      hour12: true
-    }).toUpperCase();
   }
 
   function showDatePicker(inputElement) {
@@ -334,5 +372,13 @@ document.addEventListener('DOMContentLoaded', function() {
   function removePickers() {
     const pickers = document.querySelectorAll('.date-picker, .time-picker, .picker-overlay');
     pickers.forEach(picker => picker.remove());
+  }
+
+  function formatTime(date) {
+    return date.toLocaleString('en-US', {
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: true
+    }).toUpperCase();
   }
 });

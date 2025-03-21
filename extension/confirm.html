@@ -1,311 +1,243 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Add Calendar Event</title>
+  <title>Adding an event</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500&display=swap');
-
-    * {
-      box-sizing: border-box;
+    body {
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
       margin: 0;
       padding: 0;
-    }
-
-    body {
-      font-family: 'Google Sans', Arial, sans-serif;
-      color: #202124;
-      background: white;
-      min-width: 400px;
+      color: #3c4043;
     }
 
     .container {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 0;
     }
 
     .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px 20px;
+      position: relative;
+      padding: 16px 24px;
       border-bottom: 1px solid #dadce0;
     }
 
     .header h1 {
       font-size: 22px;
       font-weight: 400;
-      color: #202124;
+      margin: 0;
+      padding-right: 40px;
     }
 
     .close-button {
-      border: none;
+      position: absolute;
+      right: 24px;
+      top: 50%;
+      transform: translateY(-50%);
       background: none;
-      padding: 8px;
+      border: none;
       cursor: pointer;
-      color: #5f6368;
-    }
-
-    .close-button:hover {
-      background: #f1f3f4;
+      padding: 8px;
       border-radius: 50%;
     }
 
-    .form-container {
-      padding: 20px;
-      flex: 1;
-      overflow-y: auto;
+    .close-button:hover {
+      background-color: #f1f3f4;
+    }
+
+    .close-button svg {
+      width: 20px;
+      height: 20px;
+      fill: #5f6368;
+    }
+
+    .form-content {
+      padding: 24px;
     }
 
     .form-group {
       margin-bottom: 16px;
     }
 
-    .input-field {
-      width: 100%;
-      padding: 12px 16px;
-      border: 1px solid #dadce0;
-      border-radius: 8px;
-      font-size: 16px;
-      color: #202124;
-      background: white;
-      font-family: 'Google Sans', Arial, sans-serif;
-    }
-
-    .input-field::placeholder {
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
       color: #5f6368;
     }
 
-    .input-field:focus {
+    input, textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+
+    input:focus, textarea:focus {
       outline: none;
       border-color: #1a73e8;
     }
 
-    .time-row {
+    .time-group {
       display: flex;
-      gap: 12px;
+      gap: 16px;
     }
 
-    .time-row .form-group {
+    .time-input {
       flex: 1;
     }
 
-    .cta-button {
-      width: 100%;
-      padding: 14px;
-      background: #e88d72;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
+    .collapsible-field {
+      cursor: pointer;
+      color: #1a73e8;
+      font-size: 14px;
+      padding: 8px 0;
+    }
+
+    .collapsible-field:hover {
+      text-decoration: underline;
+    }
+
+    .collapsible-content {
+      display: none;
+    }
+
+    .collapsible-content.expanded {
+      display: block;
+    }
+
+    .action-bar {
+      position: sticky;
+      bottom: 0;
+      background: white;
+      padding: 16px 24px;
+      border-top: 1px solid #dadce0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    button {
+      padding: 8px 24px;
+      border-radius: 4px;
+      font-size: 14px;
       font-weight: 500;
       cursor: pointer;
-      font-family: 'Google Sans', Arial, sans-serif;
-      margin-top: 16px;
     }
 
-    .cta-button:hover {
-      background: #e07f62;
+    button.secondary {
+      background: none;
+      border: 1px solid #dadce0;
+      color: #3c4043;
     }
 
-    /* Success Screen */
-    .success-screen {
+    button.primary {
+      background: #1a73e8;
+      border: none;
+      color: white;
+    }
+
+    button:hover {
+      background-color: #f1f3f4;
+    }
+
+    button.primary:hover {
+      background-color: #1557b0;
+    }
+
+    /* Success screen styles */
+    #successScreen {
       display: none;
       text-align: center;
-      padding: 40px 20px;
+      padding: 48px 24px;
     }
 
-    .success-screen.active {
+    #successScreen.active {
       display: block;
     }
 
     .success-icon {
-      width: 64px;
-      height: 64px;
-      background: #e88d72;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 24px;
-    }
-
-    .success-icon svg {
-      width: 32px;
-      height: 32px;
-      fill: white;
+      width: 48px;
+      height: 48px;
+      margin-bottom: 24px;
     }
 
     .success-title {
-      font-size: 24px;
-      margin-bottom: 12px;
-      color: #202124;
+      font-size: 22px;
+      margin-bottom: 8px;
     }
 
     .success-message {
       color: #5f6368;
-      font-size: 16px;
-      margin-bottom: 32px;
+      margin-bottom: 24px;
     }
 
-    .form-screen {
-      display: block;
-    }
-
-    .form-screen.hidden {
-      display: none;
-    }
-
-    /* Event Details in Success Screen */
     .event-details {
-      margin-top: 24px;
       text-align: left;
       background: #f8f9fa;
       border-radius: 8px;
       padding: 16px;
+      margin-top: 24px;
+    }
+
+    .event-details h3 {
+      margin: 0 0 16px 0;
+      font-size: 16px;
+      font-weight: 500;
     }
 
     .detail-item {
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
 
     .detail-item:last-child {
       margin-bottom: 0;
     }
 
-    .detail-item label {
-      display: block;
+    .detail-label {
       font-size: 12px;
       color: #5f6368;
       margin-bottom: 4px;
-      font-weight: 500;
     }
 
-    .detail-item p {
+    .detail-value {
       font-size: 14px;
-      color: #202124;
-      margin: 0;
-      line-height: 1.4;
-      word-break: break-word;
     }
 
-    .detail-item.empty {
+    .empty {
       display: none;
     }
 
-    /* Date Picker */
-    .date-picker {
-      position: absolute;
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-      width: 300px;
-      z-index: 1000;
-      font-family: 'Google Sans', Arial, sans-serif;
-    }
-
-    .date-picker-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px;
-      border-bottom: 1px solid #dadce0;
-    }
-
-    .month-nav {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .month-nav button {
-      border: none;
-      background: none;
-      padding: 8px;
-      cursor: pointer;
-      border-radius: 50%;
-      color: #5f6368;
-    }
-
-    .month-nav button:hover {
-      background: #f1f3f4;
-    }
-
-    .calendar-grid {
-      padding: 12px;
-    }
-
-    .weekdays {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      text-align: center;
-      color: #5f6368;
-      font-size: 12px;
-      margin-bottom: 8px;
-    }
-
-    .days {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 4px;
-    }
-
-    .day {
-      aspect-ratio: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      border-radius: 50%;
-      font-size: 14px;
-    }
-
-    .day:hover {
-      background: #f1f3f4;
-    }
-
-    .day.selected {
-      background: #e88d72;
-      color: white;
-    }
-
-    .day.today {
-      color: #e88d72;
-      font-weight: 500;
-    }
-
-    /* Time Picker */
+    /* Time picker styles */
     .time-picker {
       position: absolute;
       background: white;
       border-radius: 8px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-      width: 200px;
       z-index: 1000;
-      max-height: 300px;
-      overflow-y: auto;
     }
 
     .time-list {
-      padding: 8px 0;
+      max-height: 200px;
+      overflow-y: auto;
     }
 
     .time-option {
       padding: 8px 16px;
       cursor: pointer;
-      font-size: 14px;
     }
 
     .time-option:hover {
-      background: #f1f3f4;
+      background-color: #f1f3f4;
     }
 
     .time-option.selected {
-      background: #e88d72;
-      color: white;
+      background-color: #e8f0fe;
+      color: #1a73e8;
     }
 
-    /* Overlay */
     .picker-overlay {
       position: fixed;
       top: 0;
@@ -318,75 +250,87 @@
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <h1>Add Calendar Event</h1>
-      <button class="close-button" id="closeButton">✕</button>
-    </div>
+    <!-- Form Screen -->
+    <div id="formScreen">
+      <div class="header">
+        <h1>Adding an event</h1>
+        <button class="close-button" id="closeButton">
+          <svg viewBox="0 0 24 24">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
+      </div>
 
-    <div class="form-screen" id="formScreen">
-      <div class="form-container">
+      <div class="form-content">
         <div class="form-group">
-          <input type="text" class="input-field" id="title" placeholder="Add title" required>
+          <input type="text" id="title" placeholder="Add title">
         </div>
 
         <div class="form-group">
-          <input type="text" class="input-field" id="date" placeholder="Date" readonly>
+          <input type="text" id="date" placeholder="Date">
         </div>
 
-        <div class="time-row">
-          <div class="form-group">
-            <input type="text" class="input-field" id="startTime" placeholder="Start time" readonly>
+        <div class="form-group time-group">
+          <div class="time-input">
+            <input type="text" id="startTime" placeholder="Start time">
           </div>
-          <div class="form-group">
-            <input type="text" class="input-field" id="endTime" placeholder="End time" readonly>
+          <div class="time-input">
+            <input type="text" id="endTime" placeholder="End time">
           </div>
         </div>
 
-        <div class="form-group">
-          <input type="text" class="input-field" id="location" placeholder="Add location">
+        <div id="locationField" class="form-group">
+          <div class="collapsible-field" data-target="locationInput">+ Add location</div>
+          <div class="collapsible-content">
+            <input type="text" id="location" placeholder="Add location">
+          </div>
         </div>
 
-        <div class="form-group">
-          <input type="text" class="input-field" id="attendees" placeholder="Add guests">
+        <div id="guestsField" class="form-group">
+          <div class="collapsible-field" data-target="guestsInput">+ Add guests</div>
+          <div class="collapsible-content">
+            <input type="text" id="guests" placeholder="Add guests">
+          </div>
         </div>
 
-        <div class="form-group">
-          <textarea class="input-field" id="description" placeholder="Add description" rows="3"></textarea>
+        <div id="descriptionField" class="form-group">
+          <div class="collapsible-field" data-target="descriptionInput">+ Add description</div>
+          <div class="collapsible-content">
+            <textarea id="description" rows="3" placeholder="Add description"></textarea>
+          </div>
         </div>
+      </div>
 
-        <button type="button" class="cta-button" id="addToCalendar">Add to Calendar</button>
+      <div class="action-bar">
+        <button class="secondary" id="cancelButton">Cancel</button>
+        <button class="primary" id="addToCalendar">Save</button>
       </div>
     </div>
 
-    <div class="success-screen" id="successScreen">
-      <div class="success-icon">
-        <svg viewBox="0 0 24 24">
-          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
-        </svg>
-      </div>
-      <h2 class="success-title">Confirm!</h2>
-      <p class="success-message">Your event has been added successfully.</p>
-      
+    <!-- Success Screen -->
+    <div id="successScreen">
+      <svg class="success-icon" viewBox="0 0 24 24">
+        <path fill="#34A853" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+      </svg>
+      <div class="success-title">Event added!</div>
+      <div class="success-message">Your event has been added to your calendar</div>
+
       <div class="event-details">
+        <h3>Event details</h3>
         <div class="detail-item">
-          <label>Title</label>
-          <p id="confirmTitle"></p>
+          <div class="detail-value" id="confirmTitle"></div>
         </div>
         <div class="detail-item">
-          <label>Date & Time</label>
-          <p id="confirmDateTime"></p>
+          <div class="detail-value" id="confirmDateTime"></div>
         </div>
         <div class="detail-item" id="confirmLocationContainer">
-          <label>Location</label>
-          <p id="confirmLocation"></p>
+          <div class="detail-value" id="confirmLocation"></div>
         </div>
         <div class="detail-item" id="confirmAttendeesContainer">
-          <label>Guests</label>
-          <p id="confirmAttendees"></p>
+          <div class="detail-value" id="confirmAttendees"></div>
         </div>
         <div class="detail-item" id="confirmDescriptionContainer">
-          <label>Description</label>
-          <p id="confirmDescription"></p>
+          <div class="detail-value" id="confirmDescription"></div>
         </div>
       </div>
     </div>
