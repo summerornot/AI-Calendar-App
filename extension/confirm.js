@@ -274,12 +274,12 @@ document.addEventListener('DOMContentLoaded', function() {
       eventDetails.attendees.length > 0 ? eventDetails.attendees.join(', ') : null);
     updateOptionalField('confirmDescriptionContainer', 'confirmDescription', eventDetails.description);
 
-    // Show success screen
-    formScreen.classList.add('hidden');
-    successScreen.classList.add('active');
+    // Show success screen by hiding form screen and showing success screen
+    formScreen.style.display = 'none';
+    successScreen.style.display = 'block';
     
-    // Auto-close after 2 seconds
-    setTimeout(closeModal, 2000);
+    // Auto-close after 3 seconds
+    setTimeout(closeModal, 3000);
   }
 
   // Helper functions
