@@ -81,9 +81,13 @@ CREATE_EVENT_FUNCTION = {
                     "format": "email"
                 },
                 "description": "List of email addresses mentioned in the text"
+            },
+            "description": {
+                "type": ["string", "null"],
+                "description": "A detailed description of the event extracted from the text, including purpose, agenda, or any other relevant details"
             }
         },
-        "required": ["title", "date", "startTime", "endTime", "location", "attendees"]
+        "required": ["title", "date", "startTime", "endTime", "location", "attendees", "description"]
     }
 }
 
@@ -94,6 +98,7 @@ class EventDetails(BaseModel):
     endTime: str
     location: Optional[str] = None
     attendees: List[str] = []
+    description: Optional[str] = None
 
     @validator('startTime', 'endTime')
     def validate_time(cls, v):
@@ -190,7 +195,8 @@ def get_mock_response(text: str, current_time: str):
             "startTime": start_time,
             "endTime": end_time,
             "location": "",
-            "attendees": []
+            "attendees": [],
+            "description": ""
         }
         
         print(f"Generated mock response: {mock_response}")
@@ -204,7 +210,8 @@ def get_mock_response(text: str, current_time: str):
             "startTime": "10:00 AM",
             "endTime": "11:00 AM",
             "location": "",
-            "attendees": []
+            "attendees": [],
+            "description": ""
         }
 
 def process_text(text: str, current_time: str):
@@ -245,9 +252,13 @@ Rules:
    Wrong: "10 AM", "2:30", "12PM", "24:00"
 4. Dates must be in YYYY-MM-DD format
 5. Never guess missing information
+6. Always use empty string "" instead of null for missing location
+7. Extract a detailed description from the text that explains the purpose of the meeting
+8. The description should include key details about the event's purpose, agenda, or context
+9. For example, if the text mentions "demo of the new dashboard", that should be included in the description
 
 Only respond by calling the createEvent function.'''
-
+        
         # Get completion from OpenAI with function calling
         completion = client.chat.completions.create(
             model="gpt-4-turbo-preview",
@@ -273,6 +284,10 @@ Only respond by calling the createEvent function.'''
         # If no end time, add one hour to start time
         if not event_details.get('endTime'):
             event_details['endTime'] = add_one_hour(event_details['startTime'])
+            
+        # Convert null location to empty string
+        if event_details.get('location') is None:
+            event_details['location'] = ""
         
         # Validate using Pydantic model
         event = EventDetails(**event_details)
