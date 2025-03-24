@@ -1,11 +1,25 @@
 // Create and inject modal HTML
-function createModal() {
+function createModal(state = 'loading') {
+  // Prevent duplicate modals
+  if (document.getElementById('ai-calendar-modal')) {
+    console.log('Modal already exists, updating state');
+    updateModal(state);
+    return;
+  }
+
   const modal = document.createElement('div');
   modal.id = 'ai-calendar-modal';
   modal.innerHTML = `
     <div class="modal-overlay">
       <div class="modal-content">
-        <iframe src="${chrome.runtime.getURL('confirm.html')}" frameborder="0"></iframe>
+        ${state === 'loading' ? `
+          <div class="loading-container">
+            <div class="loading-spinner"></div>
+            <p>Processing event details...</p>
+          </div>
+        ` : `
+          <iframe src="${chrome.runtime.getURL('confirm.html')}" frameborder="0"></iframe>
+        `}
       </div>
     </div>
   `;
@@ -40,18 +54,68 @@ function createModal() {
       overflow: hidden;
     }
 
+    #ai-calendar-modal .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #5f6368;
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
+    }
+
+    #ai-calendar-modal .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #4285f4;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
     #ai-calendar-modal iframe {
       width: 100%;
       height: 100%;
       border: none;
     }
 
+    #ai-calendar-modal .error-icon {
+      font-size: 40px;
+      color: #f44336;
+      margin-bottom: 16px;
+    }
+
+    #ai-calendar-modal .error-message {
+      color: #f44336;
+      font-size: 16px;
+      margin-bottom: 16px;
+    }
+
+    #ai-calendar-modal .close-button {
+      background-color: #f44336;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    #ai-calendar-modal .close-button:hover {
+      background-color: #e91e63;
+    }
+
     @media (max-width: 480px) {
       #ai-calendar-modal .modal-content {
         width: 100%;
         height: 100%;
-        max-width: 100%;
-        max-height: 100%;
+        max-width: 100vw;
+        max-height: 100vh;
         border-radius: 0;
       }
     }
@@ -80,6 +144,7 @@ function createModal() {
   });
 }
 
+// Close modal
 function closeModal() {
   const modal = document.getElementById('ai-calendar-modal');
   if (modal) {
@@ -87,10 +152,49 @@ function closeModal() {
   }
 }
 
+// Update modal state
+function updateModal(state, error) {
+  const modal = document.getElementById('ai-calendar-modal');
+  if (modal) {
+    const content = modal.querySelector('.modal-content');
+    
+    if (state === 'loading') {
+      content.innerHTML = `
+        <div class="loading-container">
+          <div class="loading-spinner"></div>
+          <p>Processing event details...</p>
+        </div>
+      `;
+    } else if (state === 'error') {
+      content.innerHTML = `
+        <div class="loading-container">
+          <div class="error-icon">❌</div>
+          <p class="error-message">${error || 'An error occurred'}</p>
+          <button class="close-button">Close</button>
+        </div>
+      `;
+      // Add event listener to close button
+      setTimeout(() => {
+        const closeButton = content.querySelector('.close-button');
+        if (closeButton) {
+          closeButton.addEventListener('click', closeModal);
+        }
+      }, 0);
+    } else {
+      content.innerHTML = `
+        <iframe src="${chrome.runtime.getURL('confirm.html')}" frameborder="0"></iframe>
+      `;
+    }
+  }
+}
+
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'showModal') {
-    createModal();
+    createModal(request.state);
+    sendResponse({ success: true });
+  } else if (request.action === 'updateModal') {
+    updateModal(request.state, request.error);
     sendResponse({ success: true });
   } else if (request.action === 'closeModal') {
     closeModal();

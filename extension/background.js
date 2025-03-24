@@ -23,6 +23,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       });
       console.log('Content script injected successfully');
 
+      // Show loading modal immediately
+      chrome.tabs.sendMessage(tab.id, {
+        action: 'showModal',
+        state: 'loading'
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.log('Error sending message:', chrome.runtime.lastError);
+        } else {
+          console.log('Loading modal display response:', response);
+        }
+      });
+
       // Get current time in ISO format
       const currentTime = new Date().toISOString();
 
@@ -57,15 +69,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
           console.log('Stored event details in local storage');
         });
 
-        // Show modal
+        // Update modal to show form
         chrome.tabs.sendMessage(tab.id, {
-          action: 'showModal',
+          action: 'updateModal',
           state: 'ready'
         }, (response) => {
           if (chrome.runtime.lastError) {
             console.log('Error sending message:', chrome.runtime.lastError);
           } else {
-            console.log('Modal display response:', response);
+            console.log('Modal update response:', response);
           }
         });
         
@@ -79,14 +91,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         
         // Show error in modal
         chrome.tabs.sendMessage(tab.id, {
-          action: 'showModal',
+          action: 'updateModal',
           state: 'error',
           error: `Failed to process event: ${error.message}`
         }, (response) => {
           if (chrome.runtime.lastError) {
             console.log('Error sending message:', chrome.runtime.lastError);
           } else {
-            console.log('Modal display response:', response);
+            console.log('Modal error update response:', response);
           }
         });
       }
