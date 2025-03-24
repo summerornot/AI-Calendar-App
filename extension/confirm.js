@@ -199,11 +199,20 @@ document.addEventListener('DOMContentLoaded', function() {
       end24
     });
 
+    // Format the times properly for the background script
+    const formattedStartTime = startTimeInput.value.trim();
+    const formattedEndTime = endTimeInput.value.trim();
+    
+    console.log('Formatted times for background script:', {
+      formattedStartTime,
+      formattedEndTime
+    });
+
     const eventDetails = {
       title: titleInput.value.trim(),
       date: originalDate,  // Use the original YYYY-MM-DD format
-      startTime: start24,
-      endTime: end24,
+      startTime: formattedStartTime,
+      endTime: formattedEndTime,
       location: locationInput.value.trim(),
       attendees: guestsInput.value.split(',').map(email => email.trim()).filter(Boolean),
       description: descriptionInput.value.trim()
