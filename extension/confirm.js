@@ -185,25 +185,50 @@ document.addEventListener('DOMContentLoaded', function() {
     // Use the original date format that was stored
     const originalDate = dateInput.getAttribute('data-original-date');
     
-    // Debug logs for time conversion
-    console.log('Raw time values before conversion:', {
+    // Debug logs for time values
+    console.log('Raw time values:', {
       startTime: startTimeInput.value,
       endTime: endTimeInput.value
     });
     
-    const start24 = convertTo24Hour(startTimeInput.value);
-    const end24 = convertTo24Hour(endTimeInput.value);
+    // Ensure time values are properly formatted (HH:MM AM/PM)
+    let formattedStartTime = startTimeInput.value.trim();
+    let formattedEndTime = endTimeInput.value.trim();
     
-    console.log('Converted to 24h:', {
-      start24,
-      end24
-    });
-
-    // Format the times properly for the background script
-    const formattedStartTime = startTimeInput.value.trim();
-    const formattedEndTime = endTimeInput.value.trim();
+    // Fix any potential NaN issues in the time values
+    if (formattedStartTime.includes('NaN')) {
+      const match = formattedStartTime.match(/^(\d+):NaN\s*(AM|PM)$/i);
+      if (match) {
+        const [_, hours, period] = match;
+        formattedStartTime = `${hours}:00 ${period.toUpperCase()}`;
+        console.log('Fixed NaN in start time:', formattedStartTime);
+      }
+    }
     
-    console.log('Formatted times for background script:', {
+    if (formattedEndTime.includes('NaN')) {
+      const match = formattedEndTime.match(/^(\d+):NaN\s*(AM|PM)$/i);
+      if (match) {
+        const [_, hours, period] = match;
+        formattedEndTime = `${hours}:00 ${period.toUpperCase()}`;
+        console.log('Fixed NaN in end time:', formattedEndTime);
+      }
+    }
+    
+    // Ensure times are in the correct format with two-digit minutes
+    // This regex extracts hours, minutes, and period from time strings like "1:30 PM" or "10 AM"
+    const startMatch = formattedStartTime.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+    if (startMatch) {
+      const [_, hours, minutes = '00', period] = startMatch;
+      formattedStartTime = `${hours}:${minutes.padStart(2, '0')} ${period.toUpperCase()}`;
+    }
+    
+    const endMatch = formattedEndTime.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+    if (endMatch) {
+      const [_, hours, minutes = '00', period] = endMatch;
+      formattedEndTime = `${hours}:${minutes.padStart(2, '0')} ${period.toUpperCase()}`;
+    }
+    
+    console.log('Formatted times for event creation:', {
       formattedStartTime,
       formattedEndTime
     });
@@ -279,24 +304,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function convertTo24Hour(time12) {
     if (!time12) {
-      return null;
+      return '';
     }
     
     console.log('Converting to 24h:', time12);  // Debug log
     
-    // Try to match "11:30 PM" or "11:30PM" format - case insensitive
-    const match = time12.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/i);
-    if (!match) {
-      console.log('No match found, returning as is:', time12);  // Debug log
-      return time12; // Return as is if not in 12-hour format
+    // Check if the time is already in 24-hour format (no AM/PM)
+    if (!time12.includes('AM') && !time12.includes('PM')) {
+      console.log('Time already in 24h format:', time12);
+      return time12;
     }
     
-    let [_, hours, minutes, period] = match;
-    hours = parseInt(hours, 10);
-    minutes = parseInt(minutes, 10);
-    period = period.toUpperCase();  // Normalize to uppercase for comparison
+    // Parse the time components
+    const match = time12.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) {
+      console.error('Invalid time format:', time12);
+      return time12; // Return original if parsing failed
+    }
     
-    console.log('Parsed values:', { hours, minutes, period });  // Debug log
+    let [_, hoursStr, minutesStr, period] = match;
+    
+    // Convert to numbers
+    let hours = parseInt(hoursStr, 10);
+    let minutes = parseInt(minutesStr, 10);
+    period = period.toUpperCase();
     
     if (period === 'PM' && hours !== 12) {
       hours += 12;
@@ -314,7 +345,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const formattedHours = hours.toString().padStart(2, '0');
     const formattedMinutes = minutes.toString().padStart(2, '0');
     
-    return `${formattedHours}:${formattedMinutes}`;
+    const result = `${formattedHours}:${formattedMinutes}`;
+    console.log('Conversion result:', result);  // Debug log
+    return result;
   }
 
   function convertTo12Hour(time24) {
@@ -324,10 +357,30 @@ document.addEventListener('DOMContentLoaded', function() {
     
     console.log('Converting to 12h:', time24);  // Debug log
     
-    const [hours, minutes] = time24.split(':').map(Number);
-    const hour = parseInt(hours);
-    let period = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
+    // If already in 12-hour format, return as is
+    if (time24.includes('AM') || time24.includes('PM')) {
+      console.log('Time already in 12h format:', time24);
+      return time24;
+    }
+    
+    // Parse the time components
+    const parts = time24.split(':');
+    if (parts.length !== 2) {
+      console.error('Invalid time format for 24h conversion:', time24);
+      return time24; // Return original if parsing failed
+    }
+    
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    
+    // Validate parsed values
+    if (isNaN(hours) || isNaN(minutes)) {
+      console.error('Invalid time components for 24h conversion:', { hours, minutes });
+      return time24; // Return original if parsing failed
+    }
+    
+    let period = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 || 12;
     
     const result = `${hour12}:${String(minutes).padStart(2, '0')} ${period}`;
     console.log('Conversion result:', result);  // Debug log
