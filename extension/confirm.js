@@ -14,6 +14,40 @@ document.addEventListener('DOMContentLoaded', function() {
   const guestsInput = document.getElementById('guests');
   const descriptionInput = document.getElementById('description');
 
+  // Update end time when start time changes
+  startTimeInput.addEventListener('change', function() {
+    const startTime = startTimeInput.value;
+    if (startTime) {
+      // Parse the time and add one hour
+      const [time, period] = startTime.split(' ');
+      const [hours, minutes] = time.split(':').map(Number);
+      let endHour = hours;
+      
+      if (period === 'PM' && hours !== 12) {
+        endHour += 12;
+      } else if (period === 'AM' && hours === 12) {
+        endHour = 0;
+      }
+      
+      // Add one hour
+      endHour = (endHour + 1) % 24;
+      
+      // Convert back to 12-hour format
+      let endPeriod = 'AM';
+      if (endHour >= 12) {
+        endPeriod = 'PM';
+        if (endHour > 12) {
+          endHour -= 12;
+        }
+      }
+      if (endHour === 0) {
+        endHour = 12;
+      }
+      
+      endTimeInput.value = `${endHour}:${String(minutes).padStart(2, '0')} ${endPeriod}`;
+    }
+  });
+
   // Collapsible fields
   const collapsibleFields = document.querySelectorAll('.collapsible-field');
   collapsibleFields.forEach(field => {
@@ -28,24 +62,57 @@ document.addEventListener('DOMContentLoaded', function() {
   chrome.storage.local.get('pendingEvent', function(data) {
     if (data.pendingEvent) {
       const event = data.pendingEvent;
+      console.log('Loading event details from storage:', event);
       
       // Set title
       titleInput.value = event.title || '';
       
-      // Set date
-      dateInput.value = formatDate(event.date || new Date());
+      // Set date - store the original YYYY-MM-DD format
+      const originalDate = event.date;
+      dateInput.setAttribute('data-original-date', originalDate);
+      dateInput.value = formatDate(originalDate);
       
       // Handle time conversion and setting
       if (event.startTime) {
-        startTimeInput.value = convertTo12Hour(event.startTime);
+        // Ensure the time is properly formatted before conversion
+        let startTime = event.startTime;
+        if (startTime.includes('NaN')) {
+          // Fix NaN minutes by setting to 00
+          const match = startTime.match(/^(\d+):NaN\s*(AM|PM)$/i);
+          if (match) {
+            const [_, hours, period] = match;
+            startTime = `${hours}:00 ${period.toUpperCase()}`;
+            console.log('Fixed NaN in start time:', startTime);
+          }
+        }
+        startTimeInput.value = convertTo12Hour(startTime);
+        console.log('Set start time input to:', startTimeInput.value);
       }
       
       // Set end time (1 hour after start time if not provided)
       if (event.endTime) {
-        endTimeInput.value = convertTo12Hour(event.endTime);
-      } else if (event.startTime) {
-        const endTime = addOneHour(event.startTime);
+        // Ensure the time is properly formatted before conversion
+        let endTime = event.endTime;
+        if (endTime.includes('NaN')) {
+          // Fix NaN minutes by setting to 00
+          const match = endTime.match(/^(\d+):NaN\s*(AM|PM)$/i);
+          if (match) {
+            const [_, hours, period] = match;
+            endTime = `${hours}:00 ${period.toUpperCase()}`;
+            console.log('Fixed NaN in end time:', endTime);
+          }
+        }
         endTimeInput.value = convertTo12Hour(endTime);
+        console.log('Set end time input to:', endTimeInput.value);
+      } else if (event.startTime) {
+        // Calculate end time as start time + 1 hour
+        const [hours, minutes] = event.startTime.split(':').map(Number);
+        const endHour = (hours + 1) % 24;
+        const endTime = `${String(endHour).padStart(2, '0')}:${String(minutes || 0).padStart(2, '0')}`;
+        endTimeInput.value = convertTo12Hour(endTime);
+        console.log('Set calculated end time to:', endTimeInput.value);
+        // Update the event object with the new end time
+        event.endTime = endTime;
       }
 
       // Handle optional fields
@@ -83,34 +150,81 @@ document.addEventListener('DOMContentLoaded', function() {
   // Time pickers
   startTimeInput.addEventListener('click', function(e) {
     e.preventDefault();
-    showTimePicker(e.target);
+    showTimePicker(e.target, true);  // true indicates this is a start time picker
   });
 
   endTimeInput.addEventListener('click', function(e) {
     e.preventDefault();
-    showTimePicker(e.target);
+    showTimePicker(e.target, false);  // false indicates this is an end time picker
   });
 
   // Add to calendar
   addToCalendarButton.addEventListener('click', function() {
+    // Validate required fields
+    if (!titleInput.value.trim()) {
+      alert('Please enter a title for the event');
+      return;
+    }
+    if (!dateInput.value) {
+      alert('Please select a date for the event');
+      return;
+    }
+    if (!startTimeInput.value) {
+      alert('Please select a start time for the event');
+      return;
+    }
+    if (!endTimeInput.value) {
+      alert('Please select an end time for the event');
+      return;
+    }
+
+    // Show loading state
+    addToCalendarButton.disabled = true;
+    addToCalendarButton.textContent = 'Creating event...';
+
+    // Use the original date format that was stored
+    const originalDate = dateInput.getAttribute('data-original-date');
+    
+    // Debug logs for time conversion
+    console.log('Raw time values before conversion:', {
+      startTime: startTimeInput.value,
+      endTime: endTimeInput.value
+    });
+    
+    const start24 = convertTo24Hour(startTimeInput.value);
+    const end24 = convertTo24Hour(endTimeInput.value);
+    
+    console.log('Converted to 24h:', {
+      start24,
+      end24
+    });
+
     const eventDetails = {
-      title: titleInput.value,
-      date: dateInput.value,
-      startTime: convertTo24Hour(startTimeInput.value),
-      endTime: convertTo24Hour(endTimeInput.value),
-      location: locationInput.value,
+      title: titleInput.value.trim(),
+      date: originalDate,  // Use the original YYYY-MM-DD format
+      startTime: start24,
+      endTime: end24,
+      location: locationInput.value.trim(),
       attendees: guestsInput.value.split(',').map(email => email.trim()).filter(Boolean),
-      description: descriptionInput.value
+      description: descriptionInput.value.trim()
     };
 
+    console.log('Sending event details:', eventDetails);
     chrome.runtime.sendMessage({
       action: 'createEvent',
       eventDetails: eventDetails
     }, function(response) {
+      console.log('Received response:', response);
+      addToCalendarButton.disabled = false;
+      addToCalendarButton.textContent = 'Add to Calendar';
+
       if (response.success) {
         showSuccessScreen(eventDetails);
       } else {
-        console.error('Failed to create event:', response.error);
+        // Show error to user
+        const errorMessage = response.error || 'Failed to create event. Please try again.';
+        alert(errorMessage);
+        console.error('Failed to create event:', errorMessage);
       }
     });
   });
@@ -154,20 +268,26 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  function convertTo12Hour(time24) {
-    if (!time24) return '';
-    const [hours, minutes] = time24.split(':');
-    const hour = parseInt(hours);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minutes} ${ampm}`;
-  }
-
   function convertTo24Hour(time12) {
-    if (!time12) return '';
-    const [time, period] = time12.split(' ');
-    let [hours, minutes] = time.split(':');
-    hours = parseInt(hours);
+    if (!time12) {
+      return null;
+    }
+    
+    console.log('Converting to 24h:', time12);  // Debug log
+    
+    // Try to match "11:30 PM" or "11:30PM" format - case insensitive
+    const match = time12.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/i);
+    if (!match) {
+      console.log('No match found, returning as is:', time12);  // Debug log
+      return time12; // Return as is if not in 12-hour format
+    }
+    
+    let [_, hours, minutes, period] = match;
+    hours = parseInt(hours, 10);
+    minutes = parseInt(minutes, 10);
+    period = period.toUpperCase();  // Normalize to uppercase for comparison
+    
+    console.log('Parsed values:', { hours, minutes, period });  // Debug log
     
     if (period === 'PM' && hours !== 12) {
       hours += 12;
@@ -175,14 +295,34 @@ document.addEventListener('DOMContentLoaded', function() {
       hours = 0;
     }
     
-    return `${String(hours).padStart(2, '0')}:${minutes}`;
+    // Ensure hours and minutes are valid numbers
+    if (isNaN(hours) || isNaN(minutes)) {
+      console.error('Invalid time components:', { hours, minutes });
+      return time12; // Return original if parsing failed
+    }
+    
+    // Format with leading zeros
+    const formattedHours = hours.toString().padStart(2, '0');
+    const formattedMinutes = minutes.toString().padStart(2, '0');
+    
+    return `${formattedHours}:${formattedMinutes}`;
   }
 
-  function addOneHour(time24) {
-    const [hours, minutes] = time24.split(':');
-    let hour = parseInt(hours);
-    hour = (hour + 1) % 24;
-    return `${String(hour).padStart(2, '0')}:${minutes}`;
+  function convertTo12Hour(time24) {
+    if (!time24) {
+      return '';
+    }
+    
+    console.log('Converting to 12h:', time24);  // Debug log
+    
+    const [hours, minutes] = time24.split(':').map(Number);
+    const hour = parseInt(hours);
+    let period = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    
+    const result = `${hour12}:${String(minutes).padStart(2, '0')} ${period}`;
+    console.log('Conversion result:', result);  // Debug log
+    return result;
   }
 
   function formatDate(dateString) {
@@ -195,190 +335,72 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  function showDatePicker(inputElement) {
+  function showTimePicker(inputElement, isStartTime) {
     // Remove any existing picker
     removePickers();
 
-    const rect = inputElement.getBoundingClientRect();
-    const datePicker = document.createElement('div');
-    datePicker.className = 'date-picker';
-    datePicker.style.top = `${rect.bottom + 8}px`;
-    datePicker.style.left = `${rect.left}px`;
-
-    const date = inputElement.value ? new Date(inputElement.value) : new Date();
-    const currentMonth = date.getMonth();
-    const currentYear = date.getFullYear();
-
-    datePicker.innerHTML = `
-      <div class="date-picker-header">
-        <div class="month-nav">
-          <button class="prev-month">←</button>
-          <span>${date.toLocaleString('en-US', { month: 'long', year: 'numeric' })}</span>
-          <button class="next-month">→</button>
-        </div>
-      </div>
-      <div class="calendar-grid">
-        <div class="weekdays">
-          ${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(day => `<div>${day}</div>`).join('')}
-        </div>
-        <div class="days">
-          ${generateCalendarDays(date)}
-        </div>
-      </div>
-    `;
-
-    // Add overlay
-    const overlay = document.createElement('div');
-    overlay.className = 'picker-overlay';
-    document.body.appendChild(overlay);
-    document.body.appendChild(datePicker);
-
-    // Handle day selection
-    datePicker.addEventListener('click', function(e) {
-      if (e.target.classList.contains('day') && !e.target.classList.contains('empty')) {
-        const selectedDate = new Date(currentYear, currentMonth, parseInt(e.target.textContent));
-        inputElement.value = formatDate(selectedDate);
-        removePickers();
-      }
-    });
-
-    // Handle month navigation
-    datePicker.querySelector('.prev-month').addEventListener('click', function(e) {
-      e.stopPropagation();
-      date.setMonth(date.getMonth() - 1);
-      updateDatePicker(datePicker, date);
-    });
-
-    datePicker.querySelector('.next-month').addEventListener('click', function(e) {
-      e.stopPropagation();
-      date.setMonth(date.getMonth() + 1);
-      updateDatePicker(datePicker, date);
-    });
-
-    // Close picker when clicking outside
-    overlay.addEventListener('click', removePickers);
-  }
-
-  function showTimePicker(inputElement) {
-    // Remove any existing picker
-    removePickers();
-
-    const rect = inputElement.getBoundingClientRect();
-    const timePicker = document.createElement('div');
-    timePicker.className = 'time-picker';
-    timePicker.style.top = `${rect.bottom + 8}px`;
-    timePicker.style.left = `${rect.left}px`;
+    const picker = document.createElement('div');
+    picker.className = 'time-picker';
 
     const timeList = document.createElement('div');
     timeList.className = 'time-list';
 
-    // Generate time options in 30-minute intervals
+    // Generate time options
     const times = generateTimeOptions();
-    timeList.innerHTML = times.map(time => `
-      <div class="time-option${time === inputElement.value ? ' selected' : ''}">${time}</div>
-    `).join('');
+    times.forEach(time => {
+      const option = document.createElement('div');
+      option.className = 'time-option';
+      option.textContent = time;
+      if (time === inputElement.value) {
+        option.classList.add('selected');
+      }
+      option.addEventListener('click', () => {
+        inputElement.value = time;
+        // If this is the start time picker, update the end time
+        if (isStartTime) {
+          // Trigger the change event to update end time
+          const event = new Event('change');
+          inputElement.dispatchEvent(event);
+        }
+        removePickers();
+      });
+      timeList.appendChild(option);
+    });
 
-    timePicker.appendChild(timeList);
+    picker.appendChild(timeList);
+
+    // Position picker below input
+    const rect = inputElement.getBoundingClientRect();
+    picker.style.top = `${rect.bottom + window.scrollY}px`;
+    picker.style.left = `${rect.left + window.scrollX}px`;
 
     // Add overlay
     const overlay = document.createElement('div');
     overlay.className = 'picker-overlay';
-    document.body.appendChild(overlay);
-    document.body.appendChild(timePicker);
-
-    // Handle time selection
-    timePicker.addEventListener('click', function(e) {
-      if (e.target.classList.contains('time-option')) {
-        const selectedTime = e.target.textContent;
-        inputElement.value = selectedTime;
-
-        // If this is the start time, automatically set end time to 1 hour later
-        if (inputElement === startTimeInput) {
-          const startDate = parseTime(selectedTime);
-          const endDate = new Date(startDate.getTime() + 3600000);
-          endTimeInput.value = formatTime(endDate);
-        }
-
-        removePickers();
-      }
-    });
-
-    // Close picker when clicking outside
     overlay.addEventListener('click', removePickers);
-  }
 
-  function generateCalendarDays(date) {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const today = new Date();
-    const selectedDate = new Date(dateInput.value);
-    
-    let days = [];
-    
-    // Add empty cells for days before the first day of the month
-    for (let i = 0; i < firstDay; i++) {
-      days.push('<div class="day empty"></div>');
-    }
-    
-    // Add the days of the month
-    for (let i = 1; i <= daysInMonth; i++) {
-      const isToday = year === today.getFullYear() && month === today.getMonth() && i === today.getDate();
-      const isSelected = year === selectedDate.getFullYear() && month === selectedDate.getMonth() && i === selectedDate.getDate();
-      days.push(`<div class="day${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}">${i}</div>`);
-    }
-    
-    return days.join('');
+    document.body.appendChild(overlay);
+    document.body.appendChild(picker);
   }
 
   function generateTimeOptions() {
     const times = [];
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    
-    for (let i = 0; i < 48; i++) {
-      times.push(formatTime(date));
-      date.setMinutes(date.getMinutes() + 30);
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const time = new Date();
+        time.setHours(hour, minute, 0);
+        times.push(time.toLocaleString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        }).toUpperCase());
+      }
     }
-    
     return times;
-  }
-
-  function updateDatePicker(datePicker, date) {
-    const headerSpan = datePicker.querySelector('.month-nav span');
-    headerSpan.textContent = date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-    
-    const daysGrid = datePicker.querySelector('.days');
-    daysGrid.innerHTML = generateCalendarDays(date);
-  }
-
-  function parseTime(timeString) {
-    const [time, period] = timeString.split(' ');
-    let [hours, minutes] = time.split(':');
-    hours = parseInt(hours);
-    
-    if (period === 'PM' && hours !== 12) {
-      hours += 12;
-    } else if (period === 'AM' && hours === 12) {
-      hours = 0;
-    }
-    
-    const date = new Date();
-    date.setHours(hours, parseInt(minutes), 0, 0);
-    return date;
   }
 
   function removePickers() {
     const pickers = document.querySelectorAll('.date-picker, .time-picker, .picker-overlay');
     pickers.forEach(picker => picker.remove());
-  }
-
-  function formatTime(date) {
-    return date.toLocaleString('en-US', {
-      hour: 'numeric',
-      minute: 'numeric',
-      hour12: true
-    }).toUpperCase();
   }
 });

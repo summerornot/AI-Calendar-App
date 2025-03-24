@@ -59,8 +59,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
         // Show modal
         chrome.tabs.sendMessage(tab.id, {
-          action: 'displayModal',
-          eventDetails
+          action: 'showModal',
+          state: 'ready'
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.log('Error sending message:', chrome.runtime.lastError);
+          } else {
+            console.log('Modal display response:', response);
+          }
+        });
+        
+        // Store event details in pendingEvent for the modal to access
+        chrome.storage.local.set({ pendingEvent: eventDetails }, () => {
+          console.log('Stored event details as pendingEvent');
         });
         console.log('Modal display message sent');
       } catch (error) {
@@ -68,9 +79,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         
         // Show error in modal
         chrome.tabs.sendMessage(tab.id, {
-          action: 'displayModal',
+          action: 'showModal',
           state: 'error',
           error: `Failed to process event: ${error.message}`
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.log('Error sending message:', chrome.runtime.lastError);
+          } else {
+            console.log('Modal display response:', response);
+          }
         });
       }
     } catch (error) {
@@ -92,11 +109,22 @@ function validateTimeFormat(timeStr) {
     throw new Error('Missing time value');
   }
   
+  console.log('Validating time format:', timeStr);
+  
+  // Check if it's already in 24-hour format (from confirm.js)
+  const time24Regex = /^(\d{2}):(\d{2})$/;
+  if (time24Regex.test(timeStr)) {
+    console.log('Time is in 24-hour format, valid');
+    return true;
+  }
+  
+  // Check 12-hour format
   const timeRegex = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i;
   if (!timeRegex.test(timeStr)) {
     throw new Error(`Invalid time format: ${timeStr}. Expected format: "HH:MM AM/PM"`);
   }
   
+  console.log('Time format is valid');
   return true;
 }
 
@@ -104,7 +132,39 @@ function validateTimeFormat(timeStr) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'createEvent') {
     console.log('Received createEvent request:', request.eventDetails);
-    createCalendarEvent(request.eventDetails)
+    
+    // Debug the event details thoroughly
+    const eventDetails = request.eventDetails;
+    console.log('Event details for debugging:');
+    console.log('- Title:', eventDetails.title);
+    console.log('- Date:', eventDetails.date);
+    console.log('- Start Time (raw):', eventDetails.startTime);
+    console.log('- End Time (raw):', eventDetails.endTime);
+    
+    // Fix any potential issues with time format
+    if (eventDetails.startTime && eventDetails.startTime.includes('NaN')) {
+      console.log('Fixing invalid start time format');
+      // Extract hours from the format "10:NaN AM"
+      const match = eventDetails.startTime.match(/^(\d+):NaN\s*(AM|PM)$/i);
+      if (match) {
+        const [_, hours, period] = match;
+        eventDetails.startTime = `${hours}:00 ${period}`;
+        console.log('Fixed start time:', eventDetails.startTime);
+      }
+    }
+    
+    if (eventDetails.endTime && eventDetails.endTime.includes('NaN')) {
+      console.log('Fixing invalid end time format');
+      // Extract hours from the format "11:NaN AM"
+      const match = eventDetails.endTime.match(/^(\d+):NaN\s*(AM|PM)$/i);
+      if (match) {
+        const [_, hours, period] = match;
+        eventDetails.endTime = `${hours}:00 ${period}`;
+        console.log('Fixed end time:', eventDetails.endTime);
+      }
+    }
+    
+    createCalendarEvent(eventDetails)
       .then(response => {
         console.log('Calendar event creation response:', response);
         sendResponse(response);
@@ -204,27 +264,59 @@ async function createCalendarEvent(eventDetails) {
 function parseEventTimes(eventDetails) {
   try {
     const { date, startTime, endTime } = eventDetails;
+    console.log('Parsing event times:', { date, startTime, endTime });
     
     // Validate date format (YYYY-MM-DD)
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new Error(`Invalid date format: ${date}. Expected format: "YYYY-MM-DD"`);
     }
     
-    // Parse start time
-    const start = parseTime(startTime);
-    if (!start) {
-      throw new Error(`Failed to parse start time: ${startTime}`);
+    // Handle 24-hour format directly (from confirm.js)
+    const time24Regex = /^(\d{2}):(\d{2})$/;
+    let startHours, startMinutes, endHours, endMinutes;
+    
+    if (time24Regex.test(startTime)) {
+      // Already in 24-hour format
+      const [hours, minutes] = startTime.split(':').map(Number);
+      startHours = hours;
+      startMinutes = minutes;
+      console.log('Start time already in 24-hour format:', { startHours, startMinutes });
+    } else {
+      // Parse 12-hour format
+      const start = parseTime(startTime);
+      if (!start) {
+        throw new Error(`Failed to parse start time: ${startTime}`);
+      }
+      
+      // Convert to 24-hour format
+      startHours = start.isPM && start.hours !== 12 ? start.hours + 12 : (start.isPM || start.hours !== 12 ? start.hours : 0);
+      startMinutes = start.minutes;
+      console.log('Parsed start time to 24-hour format:', { startHours, startMinutes });
     }
     
-    // Parse end time or default to start time + 1 hour
-    const end = endTime ? parseTime(endTime) : {
-      hours: (start.hours === 12 ? 1 : (start.hours + 1) % 12 || 12),
-      minutes: start.minutes,
-      isPM: start.hours + 1 >= 12 ? start.isPM : !start.isPM
-    };
-    
-    if (!end) {
-      throw new Error(`Failed to parse end time: ${endTime}`);
+    // Handle end time similarly
+    if (time24Regex.test(endTime)) {
+      // Already in 24-hour format
+      const [hours, minutes] = endTime.split(':').map(Number);
+      endHours = hours;
+      endMinutes = minutes;
+      console.log('End time already in 24-hour format:', { endHours, endMinutes });
+    } else if (endTime) {
+      // Parse 12-hour format
+      const end = parseTime(endTime);
+      if (!end) {
+        throw new Error(`Failed to parse end time: ${endTime}`);
+      }
+      
+      // Convert to 24-hour format
+      endHours = end.isPM && end.hours !== 12 ? end.hours + 12 : (end.isPM || end.hours !== 12 ? end.hours : 0);
+      endMinutes = end.minutes;
+      console.log('Parsed end time to 24-hour format:', { endHours, endMinutes });
+    } else {
+      // Default to start time + 1 hour
+      endHours = (startHours + 1) % 24;
+      endMinutes = startMinutes;
+      console.log('Using default end time (start + 1 hour):', { endHours, endMinutes });
     }
     
     // Create Date objects
@@ -235,18 +327,19 @@ function parseEventTimes(eventDetails) {
       throw new Error(`Invalid date: ${date}`);
     }
     
-    // Create start date with proper 24-hour conversion
-    const startHours = start.isPM && start.hours !== 12 ? start.hours + 12 : (start.isPM || start.hours !== 12 ? start.hours : 0);
-    const startDateTime = new Date(year, month - 1, day, startHours, start.minutes);
-    
-    // Create end date with proper 24-hour conversion
-    const endHours = end.isPM && end.hours !== 12 ? end.hours + 12 : (end.isPM || end.hours !== 12 ? end.hours : 0);
-    const endDateTime = new Date(year, month - 1, day, endHours, end.minutes);
+    // Create start and end dates
+    const startDateTime = new Date(year, month - 1, day, startHours, startMinutes);
+    const endDateTime = new Date(year, month - 1, day, endHours, endMinutes);
     
     // If end time is before start time, assume it's the next day
     if (endDateTime < startDateTime) {
       endDateTime.setDate(endDateTime.getDate() + 1);
     }
+    
+    console.log('Final datetime objects:', {
+      startDateTime: startDateTime.toISOString(),
+      endDateTime: endDateTime.toISOString()
+    });
     
     return {
       startDateTime: startDateTime.toISOString(),
@@ -263,6 +356,7 @@ function parseTime(timeStr) {
   try {
     // Remove any extra spaces
     timeStr = timeStr.trim();
+    console.log('Parsing time string:', timeStr);
     
     // Check for valid format
     const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -273,6 +367,8 @@ function parseTime(timeStr) {
     let hours = parseInt(match[1], 10);
     let minutes = parseInt(match[2], 10);
     const period = match[3].toUpperCase();
+    
+    console.log('Parsed time components:', { hours, minutes, period });
     
     // Validate hours and minutes
     if (isNaN(hours) || isNaN(minutes) || hours < 1 || hours > 12 || minutes < 0 || minutes > 59) {
