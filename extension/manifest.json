@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AI Calendar Assistant",
-  "version": "1.0.0",
-  "description": "AI-powered tool to instantly add events to Google Calendar from selected text",
+  "name": "Add to Google Calendar",
+  "version": "1.1.0",
+  "description": "AI-powered tool to instantly add events to Google Calendar from any text selection with smart time and date detection",
   "permissions": [
     "contextMenus",
     "storage",
@@ -18,7 +18,10 @@
   ],
   "oauth2": {
     "client_id": "905368676199-hjjsvonnocaurmn7lkml4fudq1fmg5fs.apps.googleusercontent.com",
-    "scopes": ["https://www.googleapis.com/auth/calendar"]
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar",
+      "https://www.googleapis.com/auth/calendar.events"
+    ]
   },
   "background": {
     "service_worker": "background.js",
@@ -52,5 +55,8 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
-  }
+  },
+  "author": "AI Calendar Team",
+  "homepage_url": "https://github.com/summerornot/AI-Calendar-App",
+  "minimum_chrome_version": "88"
 }
