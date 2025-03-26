@@ -254,8 +254,31 @@ Rules:
 5. Never guess missing information
 6. Always use empty string "" instead of null for missing location
 7. Extract a detailed description from the text that explains the purpose of the meeting
-8. The description should include key details about the event's purpose, agenda, or context
-9. For example, if the text mentions "demo of the new dashboard", that should be included in the description
+
+DESCRIPTION CREATION RULES:
+1. DO NOT copy-paste the conversation text into the description
+2. Create a concise summary of the meeting purpose and topics
+3. Format as a short bullet list (2-5 points) when appropriate
+4. Focus on key topics, decisions, or agenda items
+5. Include meeting goals (e.g., "finalize scope", "review designs")
+6. Extract any mentioned deliverables or expected outcomes
+7. If a meeting link is mentioned, include it in the description
+
+CONVERSATION HANDLING:
+When processing text that appears to be a conversation (with multiple speakers or message exchanges):
+1. Identify the main event details from the conversation context
+2. Extract the title based on the main topic being discussed (e.g., "Q2 Roadmap Discussion")
+3. Identify all participants mentioned in the conversation and add them as attendees
+4. Look for URLs or location information that indicates where the meeting will take place
+5. Extract the specific date and time mentioned, not just the first occurrence of a time
+6. Create a bullet-point summary of the key topics and purpose of the meeting
+7. If a video conferencing link is mentioned (Zoom, Google Meet, etc.), extract it as the location
+
+Example of good description for a conversation:
+- Finalize project scope for Q2
+- Review design mockups
+- Discuss implementation timeline
+- Prepare for client presentation
 
 Only respond by calling the createEvent function.'''
         
@@ -319,7 +342,7 @@ async def process_event(request: Request):
     try:
         data = await request.json()
         text = data.get('text', '')
-        current_time = data.get('currentTime')  # ISO string from frontend
+        current_time = data.get('current_time')  # ISO string from frontend
         
         if not text:
             raise HTTPException(status_code=400, detail="No text provided")
@@ -334,7 +357,11 @@ async def process_event(request: Request):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "ok"}
+
+@app.get("/")
+async def root():
+    return {"message": "AI Calendar Extension API is running. Use /process_event endpoint to process text."}
 
 if __name__ == "__main__":
     import uvicorn
