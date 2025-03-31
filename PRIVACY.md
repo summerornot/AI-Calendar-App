@@ -67,7 +67,7 @@ We may update this privacy policy. Any changes will be reflected in the extensio
 ## Contact
 
 For questions about this privacy policy, contact us at:
-- Email: aicalendarteam@gmail.com
+- Email: shreyabisht08@gmail.com
 - GitHub: https://github.com/summerornot/AI-Calendar-App/issues
 
 Last updated: March 26, 2025
