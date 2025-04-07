@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>AI Calendar Assistant</title>
+  <title>Add to Calendar</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Funnel+Display&display=swap" rel="stylesheet">
@@ -32,15 +32,66 @@
       font-size: 14px;
       color: #5f6368;
     }
+    .button {
+      background-color: #4285F4;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 15px;
+    }
+    .button:hover {
+      background-color: #3367D6;
+    }
+    .auth-status {
+      margin-top: 15px;
+      font-size: 14px;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <div id="status" class="status">Select text and right-click to add events</div>
+    <div id="status" class="status">Select text and right-click to add to calendar</div>
+    <div id="auth-status" class="auth-status">Checking authentication status...</div>
+    <button id="auth-button" class="button" style="display: none;">Connect to Google Calendar</button>
     <div id="details" class="details"></div>
   </div>
 
   <script>
+    // Check authentication status on popup open
+    function checkAuthStatus() {
+      chrome.runtime.sendMessage({action: 'checkAuthStatus'}, function(response) {
+        const authStatusDiv = document.getElementById('auth-status');
+        const authButton = document.getElementById('auth-button');
+        
+        if (response && response.isAuthenticated) {
+          authStatusDiv.textContent = 'Connected to Google Calendar';
+          authStatusDiv.style.color = '#1e8e3e';
+          authButton.style.display = 'none';
+        } else {
+          authStatusDiv.textContent = 'Not connected to Google Calendar';
+          authStatusDiv.style.color = '#EA4335';
+          authButton.style.display = 'block';
+        }
+      });
+    }
+    
+    // Initialize authentication
+    document.getElementById('auth-button').addEventListener('click', function() {
+      chrome.runtime.sendMessage({action: 'authenticate'}, function(response) {
+        if (response && response.success) {
+          checkAuthStatus();
+        } else {
+          const authStatusDiv = document.getElementById('auth-status');
+          authStatusDiv.textContent = 'Authentication failed. Please try again.';
+          authStatusDiv.style.color = '#EA4335';
+        }
+      });
+    });
+    
     // Check for last event status
     chrome.storage.local.get(['lastEvent'], function(result) {
       const statusDiv = document.getElementById('status');
@@ -71,6 +122,9 @@
         }
       }
     });
+    
+    // Check auth status when popup opens
+    checkAuthStatus();
   </script>
 </body>
 </html>

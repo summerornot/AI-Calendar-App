@@ -100,6 +100,53 @@ chrome.runtime.onInstalled.addListener(() => {
     .catch(error => {
       console.error('Failed to preload confirm.html:', error);
     });
+    
+  // Check authentication status and prompt if needed
+  setTimeout(() => {
+    console.log('Checking initial authentication status...');
+    checkAndPromptForAuth();
+  }, 1000);
+});
+
+// Function to check auth status and prompt if needed
+function checkAndPromptForAuth() {
+  chrome.identity.getAuthToken({ interactive: false }, (token) => {
+    if (chrome.runtime.lastError || !token) {
+      console.log('User not authenticated with Google Calendar, showing notification');
+      
+      // Create a notification prompting the user to authenticate
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icons/icon128.png',
+        title: 'Calendar Extension Setup',
+        message: 'Please connect to your Google Calendar to use this extension',
+        buttons: [
+          { title: 'Connect Now' }
+        ]
+      });
+    } else {
+      console.log('User already authenticated with Google Calendar');
+    }
+  });
+}
+
+// Listen for notification button clicks
+chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+  if (buttonIndex === 0) { // "Connect Now" button
+    console.log('User clicked Connect Now, initiating auth flow');
+    
+    // Open the popup to show the auth button
+    chrome.action.openPopup();
+    
+    // Attempt authentication
+    chrome.identity.getAuthToken({ interactive: true }, (token) => {
+      if (chrome.runtime.lastError || !token) {
+        console.error('Authentication failed:', chrome.runtime.lastError);
+      } else {
+        console.log('Authentication successful');
+      }
+    });
+  }
 });
 
 // Listen for browser startup
@@ -704,10 +751,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Handle closeModal message
     console.log('Received closeModal request');
     return false; // Synchronous response
+  } else if (request.action === 'checkAuthStatus') {
+    // Check if we have a valid auth token
+    chrome.identity.getAuthToken({ interactive: false }, (token) => {
+      if (chrome.runtime.lastError || !token) {
+        console.log('User is not authenticated with Google Calendar');
+        sendResponse({ isAuthenticated: false });
+      } else {
+        console.log('User is authenticated with Google Calendar');
+        sendResponse({ isAuthenticated: true });
+      }
+    });
+    
+    return true; // Indicates async response
+  } else if (request.action === 'authenticate') {
+    // Explicitly trigger the authentication flow
+    console.log('Initiating Google Calendar authentication flow');
+    
+    chrome.identity.getAuthToken({ interactive: true }, (token) => {
+      if (chrome.runtime.lastError || !token) {
+        console.error('Authentication failed:', chrome.runtime.lastError);
+        sendResponse({ success: false, error: chrome.runtime.lastError?.message || 'Authentication failed' });
+      } else {
+        console.log('Authentication successful, token received');
+        sendResponse({ success: true });
+      }
+    });
+    
+    return true; // Indicates async response
   }
-  
-  // For any other message types
-  return false; // Synchronous response
 });
 
 // Create calendar event
