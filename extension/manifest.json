@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Add to Google Calendar",
+  "name": "Add to Calendar",
   "version": "1.1.0",
-  "description": "AI-powered tool to instantly add events to Google Calendar from any text selection with smart time and date detection",
+  "description": "Quickly create Google Calendar events from selected text on webpages",
   "permissions": [
     "contextMenus",
     "storage",
@@ -13,19 +13,18 @@
     "scripting"
   ],
   "host_permissions": [
-    "https://*.onrender.com/*",
-    "https://www.googleapis.com/*"
+    "https://ai-calendar-app.onrender.com/process_event",
+    "https://www.googleapis.com/calendar/v3/*"
   ],
   "oauth2": {
-    "client_id": "905368676199-hjjsvonnocaurmn7lkml4fudq1fmg5fs.apps.googleusercontent.com",
+    "client_id": "905368676199-iajk0fec1cq46575h7i62idnjj9j3pe7.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/calendar",
       "https://www.googleapis.com/auth/calendar.events"
     ]
   },
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
