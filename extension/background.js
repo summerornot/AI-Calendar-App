@@ -71,6 +71,24 @@ function keepAlive() {
   console.log('Keep-alive mechanism initialized with interval:', keepAliveInterval, 'ms');
 }
 
+// Function to initialize Google Calendar API authorization
+function initializeGoogleAuth() {
+  console.log('Initializing Google Calendar API authorization');
+  
+  // Get the extension ID for proper redirect URI
+  const extensionId = chrome.runtime.id;
+  console.log('Extension ID:', extensionId);
+  
+  // Check if we need to authorize
+  chrome.identity.getAuthToken({ interactive: false }, (token) => {
+    if (chrome.runtime.lastError || !token) {
+      console.log('Not currently authorized with Google Calendar');
+    } else {
+      console.log('Already authorized with Google Calendar');
+    }
+  });
+}
+
 // Initialize extension
 function initializeExtension() {
   console.log('Initializing extension...');
@@ -80,6 +98,9 @@ function initializeExtension() {
   
   // Start keep-alive mechanism
   keepAlive();
+  
+  // Initialize Google Calendar authorization
+  initializeGoogleAuth();
 }
 
 // Start initialization immediately
@@ -786,19 +807,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function createCalendarEvent(eventDetails) {
   console.log('Creating calendar event with details:', eventDetails);
   try {
-    // Get OAuth token
+    // Get OAuth token with more detailed error logging
     console.log('Getting OAuth token...');
     
     // Use a more robust approach to get the token
     const getToken = () => {
       return new Promise((resolve, reject) => {
-        chrome.identity.getAuthToken({ interactive: true }, (token) => {
-          if (chrome.runtime.lastError) {
-            console.error('OAuth error:', chrome.runtime.lastError);
-            reject(new Error(chrome.runtime.lastError.message));
-          } else if (!token) {
-            reject(new Error('Failed to get authentication token'));
+        // First check if we're authenticated
+        chrome.identity.getAuthToken({ interactive: false }, (token) => {
+          if (chrome.runtime.lastError || !token) {
+            console.log('Not authenticated or token missing, requesting interactive auth');
+            
+            // Request interactive authentication
+            chrome.identity.getAuthToken({ interactive: true }, (interactiveToken) => {
+              if (chrome.runtime.lastError) {
+                console.error('Interactive OAuth error:', chrome.runtime.lastError);
+                console.error('Error details:', JSON.stringify(chrome.runtime.lastError));
+                reject(new Error(`Authentication failed: ${chrome.runtime.lastError.message}`));
+              } else if (!interactiveToken) {
+                console.error('No token received from interactive auth');
+                reject(new Error('Failed to get authentication token'));
+              } else {
+                console.log('Successfully obtained token through interactive auth');
+                resolve(interactiveToken);
+              }
+            });
           } else {
+            console.log('Already authenticated, using existing token');
             resolve(token);
           }
         });
@@ -840,7 +875,7 @@ async function createCalendarEvent(eventDetails) {
 
     console.log('Formatted event:', event);
 
-    // Create event
+    // Create event with more detailed error handling
     console.log('Sending request to Google Calendar API...');
     try {
       const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
@@ -857,16 +892,22 @@ async function createCalendarEvent(eventDetails) {
       
       // Handle non-JSON responses
       let responseData;
+      let responseText;
+      
       try {
-        responseData = await response.json();
-        console.log('Google Calendar API response:', responseData);
-      } catch (e) {
-        console.error('Failed to parse response as JSON:', e);
-        if (!response.ok) {
-          throw new Error(`Failed to create calendar event: HTTP ${response.status}`);
+        // First try to get the raw text for debugging
+        responseText = await response.text();
+        console.log('Raw response text:', responseText);
+        
+        // Then parse as JSON if possible
+        try {
+          responseData = JSON.parse(responseText);
+          console.log('Google Calendar API response:', responseData);
+        } catch (parseError) {
+          console.error('Failed to parse response as JSON:', parseError);
         }
-        // If we can't parse JSON but the response is OK, we'll assume success
-        return { success: true };
+      } catch (e) {
+        console.error('Failed to read response text:', e);
       }
 
       if (!response.ok) {
@@ -878,10 +919,16 @@ async function createCalendarEvent(eventDetails) {
           });
           throw new Error('Authentication token expired. Please try again.');
         }
-        throw new Error(`Failed to create calendar event: ${responseData.error?.message || 'Unknown error'}`);
+        
+        // Provide more detailed error information
+        const errorMessage = responseData && responseData.error 
+          ? `${responseData.error.message || 'Unknown error'} (code: ${responseData.error.code || 'unknown'})`
+          : `HTTP error ${response.status}`;
+          
+        throw new Error(`Failed to create calendar event: ${errorMessage}`);
       }
 
-      return { success: true, eventId: responseData.id };
+      return { success: true, eventId: responseData?.id };
     } catch (fetchError) {
       console.error('Fetch error:', fetchError);
       throw fetchError;

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Add to Calendar",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Quickly create Google Calendar events from selected text on webpages",
   "permissions": [
     "contextMenus",
@@ -23,6 +23,7 @@
       "https://www.googleapis.com/auth/calendar.events"
     ]
   },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiDWnPqIHR3U9nGXEcQ/JX5vc+ozFUKoXNTUJ7QEf6Pc/PiVOGTU8GBDT0z0BbRW5+SXF79EgYCdcH6AR8/xFI6MMiJ5tC7lNkyhKkK9eV9nFR1I4+QFTwTjKK3GIcWZB5fGGAuJXEVBBIoXvW3qwXKAOKgkTL5f0xO8QOHvSGHnkgEUOLwAcyhLHAkXzlY0OZXTbCZbDGUuUdSHKZNXNfXY4ZCr9lTmMgjR5WXrQupQvjGQGLvl8G5fYT4r3KXbECGEKt3lUX1XPxGwcCEAwy3ZnVIlIYHQcQgqxkzUwRWYBvY/xX5YxxIrPJIIZlvdvF5NJ/3h+FTpH0FlBwwIDAQAB",
   "background": {
     "service_worker": "background.js"
   },
