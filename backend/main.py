@@ -241,64 +241,59 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC'):
         system_prompt = f'''You are an assistant that extracts calendar event details from natural language.
 
 Current date: {current_date}
-User timezone: {user_timezone} (UTC{user_now.strftime("%z")})
+Current time: {user_now.strftime("%H:%M")}
+User's timezone: {user_timezone} (UTC{user_now.strftime("%z")})
 
-Use this to resolve relative dates and times:
+Reference dates:
 - "today" = {current_date}
 - "tomorrow" = {tomorrow_date}
 - "next week" = {next_week_date}
 
-TITLE CREATION RULES:
-1. Create a SHORT, CONCISE title (3-5 words) that captures the purpose of the meeting
-2. Focus on the meeting TYPE or PURPOSE, not the details of when/where
-3. Use action verbs when appropriate (e.g., "Review", "Discuss", "Plan")
-4. DO NOT include date/time information in the title
-5. DO NOT use quotes in the title
-6. DO NOT copy-paste large portions of the text as the title
-7. Examples of good titles:
-   - "Team Weekly Sync"
-   - "Project Planning Meeting"
-   - "Interview with Candidate"
-   - "Coffee with David"
-   - "Doctor Appointment"
+BEFORE extracting, reason through these steps:
 
-Rules:
-1. Convert any timezone-specific times to {user_timezone}
-2. If no end time given, set it to 1 hour after start time
-3. Times MUST be in 'HH:MM AM/PM' format with TWO-DIGIT minutes:
-   Correct: "10:00 AM", "2:30 PM", "12:00 PM"
-   Wrong: "10 AM", "2:30", "12PM", "24:00"
-4. Dates must be in YYYY-MM-DD format
-5. Never guess missing information
-6. Always use empty string "" instead of null for missing location
-7. Extract a detailed description from the text that explains the purpose of the meeting
+## STEP 1: IDENTIFY THE USER'S PERSPECTIVE
+- The USER is in {user_timezone}
+- Times labeled "your time", "my time", or unlabeled → assume {user_timezone}
+- Times labeled "his time", "her time", "their time" → another person's timezone (note but deprioritize)
 
-DESCRIPTION CREATION RULES:
-1. DO NOT copy-paste the conversation text into the description
-2. Create a concise summary of the meeting purpose and topics
-3. Format as a short bullet list (2-5 points) when appropriate
-4. Focus on key topics, decisions, or agenda items
-5. Include meeting goals (e.g., "finalize scope", "review designs")
-6. Extract any mentioned deliverables or expected outcomes
-7. If a meeting link is mentioned, include it in the description
+## STEP 2: IDENTIFY ALL DATES MENTIONED
+- List every date reference (explicit like "February 6th" or relative like "tomorrow")
+- If year not specified: check if date has passed this year → if yes, use next year
+- If day-of-week mentioned: verify it matches the date (e.g., "Thursday Feb 6" → find the Feb 6 that IS a Thursday)
 
-CONVERSATION HANDLING:
-When processing text that appears to be a conversation (with multiple speakers or message exchanges):
-1. Identify the main event details from the conversation context
-2. Extract the title based on the main topic being discussed (e.g., "Q2 Roadmap Discussion")
-3. Identify all participants mentioned in the conversation and add them as attendees
-4. Look for URLs or location information that indicates where the meeting will take place
-5. Extract the specific date and time mentioned, not just the first occurrence of a time
-6. Create a bullet-point summary of the key topics and purpose of the meeting
-7. If a video conferencing link is mentioned (Zoom, Google Meet, etc.), extract it as the location
+## STEP 3: IDENTIFY ALL TIMES MENTIONED
+- List every time with its timezone (if specified)
+- Categorize each:
+  * PRIMARY: The main/preferred time for the USER (usually mentioned first, or the one being proposed)
+  * FALLBACK: Alternative times ("if X doesn't work", "or we could do", "alternatively")
+  * OTHER_PERSON: Times explicitly in someone else's timezone ("his time", "their time")
+- Select the PRIMARY time only
 
-Example of good description for a conversation:
-- Finalize project scope for Q2
-- Review design mockups
-- Discuss implementation timeline
-- Prepare for client presentation
+## STEP 4: TIMEZONE CONVERSION
+- Convert the selected time to {user_timezone} if needed
+- If time has no timezone specified, assume it's already in {user_timezone}
+- Output final time in {user_timezone}
 
-Only respond by calling the createEvent function.'''
+## STEP 5: EXTRACT REMAINING DETAILS
+Title rules:
+- Short (3-5 words), captures purpose
+- No dates/times in title
+- No quotes in title
+- Examples: "Team Weekly Sync", "Coffee with David", "Doctor Appointment"
+
+Location: Physical address or meeting link, empty string if none
+Attendees: Email addresses only
+Description: Brief summary (2-5 bullet points), NOT the raw text. Focus on purpose, agenda, deliverables.
+
+## STEP 6: VALIDATE
+- Date is not in the past
+- Time format is HH:MM AM/PM (two-digit minutes like "10:00 AM", not "10 AM")
+- End time is after start time (default: 1 hour after start)
+- Use empty string "" instead of null for missing location
+
+After reasoning through all steps, call the createEvent function with your final answer.
+
+IMPORTANT: Show your reasoning for Steps 1-4 before the function call.'''
         
         # Get completion from OpenAI with function calling
         # Using gpt-3.5-turbo for faster response times (~3x faster than gpt-4)
