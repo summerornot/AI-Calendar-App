@@ -216,15 +216,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const startTime = startTimeInput.value;
     const endTime = endTimeInput.value;
 
-    const formattedDate = formatDateForDisplay(dateStr);
+    // Inline display shows full date with year
+    const formattedDateFull = formatDateForDisplay(dateStr, true);
+    // Pill shows shorter date without year (like Google Calendar)
+    const formattedDateShort = formatDateForDisplay(dateStr, false);
     const formattedTime = `${formatTimeForDisplay(startTime)} - ${formatTimeForDisplay(endTime)}`;
 
-    // Update inline display
-    dateText.textContent = formattedDate;
+    // Update inline display (with year)
+    dateText.textContent = formattedDateFull;
     timeText.textContent = formattedTime;
 
-    // Update pills
-    datePill.textContent = formattedDate;
+    // Update pills (without year for shorter text)
+    datePill.textContent = formattedDateShort;
     startTimePill.textContent = formatTimeForDisplay(startTime);
     endTimePill.textContent = formatTimeForDisplay(endTime);
   }
@@ -236,19 +239,24 @@ document.addEventListener('DOMContentLoaded', function() {
     return `${year}-${month}-${day}`;
   }
 
-  function formatDateForDisplay(dateStr) {
+  function formatDateForDisplay(dateStr, includeYear = false) {
     if (!dateStr) return '';
     
     try {
       const [year, month, day] = dateStr.split('-').map(Number);
       const date = new Date(year, month - 1, day);
       
-      return date.toLocaleDateString('en-US', {
+      const options = {
         weekday: 'long',
         month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      });
+        day: 'numeric'
+      };
+      
+      if (includeYear) {
+        options.year = 'numeric';
+      }
+      
+      return date.toLocaleDateString('en-US', options);
     } catch (e) {
       console.error('Error formatting date:', e);
       return dateStr;
