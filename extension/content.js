@@ -34,11 +34,8 @@ function createModal(state = 'loading') {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     width: 448px;
     max-width: 90%;
-    height: auto;
     max-height: 90vh;
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
   `;
 
   // Create iframe for the form
@@ -48,8 +45,7 @@ function createModal(state = 'loading') {
   iframe.style.cssText = `
     border: none;
     width: 100%;
-    height: 520px;
-    flex: 1;
+    height: 580px;
   `;
 
   // Create loading spinner
@@ -242,7 +238,7 @@ function updateModal(state, data = {}) {
             // Hide error, show iframe with blank form for manual entry
             errorContainer.style.display = 'none';
             iframe.style.display = 'block';
-            iframe.style.height = '520px';
+            iframe.style.height = '580px';
             
             // Send message to iframe to show blank form for manual entry
             if (iframe.contentWindow) {
@@ -259,7 +255,7 @@ function updateModal(state, data = {}) {
       break;
     case 'ready':
       iframe.style.display = 'block';
-      iframe.style.height = '520px';
+      iframe.style.height = '580px';
       
       // Send event details to the iframe if available
       if (iframe.contentWindow && data.eventDetails) {
