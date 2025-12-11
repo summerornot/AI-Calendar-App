@@ -289,23 +289,24 @@ Call createEvent with the extracted details.'''
         # Validate using Pydantic model
         event = EventDetails(**event_details)
         
-        # Additional validation
+        # Check if date is in the past - if so, auto-correct to tomorrow
         event_date = datetime.strptime(event.date, '%Y-%m-%d').date()
+        date_was_corrected = False
         if event_date < user_now.date():
-            raise ValueError(f"Invalid or past date: {event.date}")
+            print(f"Date {event.date} is in the past, correcting to tomorrow: {tomorrow_date}")
+            event_details['date'] = tomorrow_date
+            date_was_corrected = True
+            # Re-validate with corrected date
+            event = EventDetails(**event_details)
         
-        # Validate relative date references
-        if "today" in text.lower() and event.date != current_date:
-            raise ValueError(f"Date must be {current_date} when 'today' is mentioned")
-            
-        if "tomorrow" in text.lower() and event.date != tomorrow_date:
-            raise ValueError(f"Date must be {tomorrow_date} when 'tomorrow' is mentioned")
-            
-        if "next week" in text.lower() and event.date != next_week_date:
-            raise ValueError(f"Date must be {next_week_date} when 'next week' is mentioned")
+        result = event.model_dump()
         
-        print(f"Validated event details: {event.model_dump()}")
-        return event.model_dump()
+        # Add a flag if date was auto-corrected so UI can show a warning
+        if date_was_corrected:
+            result['extraction_error'] = f"The extracted date was in the past. Date has been set to tomorrow."
+        
+        print(f"Validated event details: {result}")
+        return result
             
     except Exception as e:
         print(f"Error processing text: {str(e)}")
@@ -361,6 +362,14 @@ def create_fallback_response(text: str, current_time: str, error_message: str, u
         if len(title) > 40:
             title = title[:40] + "..."
     
+    # Create a brief description instead of dumping raw text
+    # Truncate to first 100 chars if text is long
+    brief_description = ""
+    if len(text) > 100:
+        brief_description = text[:100].strip() + "..."
+    else:
+        brief_description = text.strip()
+    
     fallback_response = {
         "title": title,
         "date": default_date,
@@ -368,8 +377,8 @@ def create_fallback_response(text: str, current_time: str, error_message: str, u
         "endTime": "1:00 PM",
         "location": "",
         "attendees": [],
-        "description": text,  # Preserve original text as description
-        "extraction_error": "Sorry, the event could not be extracted correctly. Please fill out remaining details manually."
+        "description": brief_description,
+        "extraction_error": "Could not fully extract event details. Please verify and adjust as needed."
     }
     
     print(f"Fallback response: {fallback_response}")
