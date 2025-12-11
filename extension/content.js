@@ -32,12 +32,11 @@ function createModal(state = 'loading') {
     background-color: white;
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    width: 500px;
+    width: 448px;
     max-width: 90%;
     height: auto;
-    min-height: 600px;
     max-height: 90vh;
-    overflow: visible;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
   `;
@@ -49,8 +48,7 @@ function createModal(state = 'loading') {
   iframe.style.cssText = `
     border: none;
     width: 100%;
-    height: 600px;
-    min-height: 600px;
+    height: 520px;
     flex: 1;
   `;
 
@@ -244,7 +242,7 @@ function updateModal(state, data = {}) {
             // Hide error, show iframe with blank form for manual entry
             errorContainer.style.display = 'none';
             iframe.style.display = 'block';
-            iframe.style.height = '600px';
+            iframe.style.height = '520px';
             
             // Send message to iframe to show blank form for manual entry
             if (iframe.contentWindow) {
@@ -261,7 +259,7 @@ function updateModal(state, data = {}) {
       break;
     case 'ready':
       iframe.style.display = 'block';
-      iframe.style.height = '600px';
+      iframe.style.height = '520px';
       
       // Send event details to the iframe if available
       if (iframe.contentWindow && data.eventDetails) {
@@ -273,17 +271,6 @@ function updateModal(state, data = {}) {
       } else {
         console.log('No event details to send to iframe or iframe not ready');
       }
-      
-      // Force resize after a short delay to ensure content is visible
-      setTimeout(() => {
-        const modalContent = document.getElementById('ai-calendar-modal-content');
-        if (modalContent) {
-          modalContent.style.height = 'auto';
-          modalContent.style.minHeight = '600px';
-        }
-        iframe.style.height = '600px';
-        console.log('Forced resize of modal content and iframe');
-      }, 300);
       break;
     default:
       console.error('Unknown modal state:', state);

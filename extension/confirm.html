@@ -126,6 +126,8 @@
 
     .datetime-separator {
       color: #5f6368;
+      align-self: center;
+      margin: 0 4px;
     }
 
     /* Date/Time Row - Expanded */
@@ -139,9 +141,9 @@
 
     .datetime-pills {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      align-items: center;
       gap: 8px;
-      margin-bottom: 8px;
     }
 
     .datetime-pill {
@@ -494,14 +496,14 @@
             <!-- Inline display (default) -->
             <div class="datetime-display" id="datetimeDisplay">
               <span class="datetime-text" id="dateText">Thursday, February 5, 2026</span>
-              <span class="datetime-text" id="timeText">5:00am – 5:30am</span>
+              <span class="datetime-text" id="timeText">5:00am - 5:30am</span>
             </div>
             <!-- Expanded view (when clicked) -->
             <div class="datetime-expanded" id="datetimeExpanded">
               <div class="datetime-pills">
                 <button class="datetime-pill" id="datePill">Thursday, February 5, 2026</button>
                 <button class="datetime-pill" id="startTimePill">5:00am</button>
-                <span style="align-self: center; color: #5f6368;">–</span>
+                <span class="datetime-separator">-</span>
                 <button class="datetime-pill" id="endTimePill">5:30am</button>
               </div>
             </div>

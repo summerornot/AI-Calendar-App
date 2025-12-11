@@ -217,7 +217,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const endTime = endTimeInput.value;
 
     const formattedDate = formatDateForDisplay(dateStr);
-    const formattedTime = `${formatTimeForDisplay(startTime)} – ${formatTimeForDisplay(endTime)}`;
+    const formattedTime = `${formatTimeForDisplay(startTime)} - ${formatTimeForDisplay(endTime)}`;
 
     // Update inline display
     dateText.textContent = formattedDate;
