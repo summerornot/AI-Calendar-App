@@ -238,67 +238,22 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC'):
         tomorrow_date = (user_now + timedelta(days=1)).strftime('%Y-%m-%d')
         next_week_date = (user_now + timedelta(weeks=1)).strftime('%Y-%m-%d')
         
-        system_prompt = f'''You are an assistant that extracts calendar event details from natural language.
+        system_prompt = f'''Extract calendar event details from text.
 
 Current date: {current_date}
-Current time: {user_now.strftime("%H:%M")}
-User's timezone: {user_timezone} (UTC{user_now.strftime("%z")})
+Reference: "today" = {current_date}, "tomorrow" = {tomorrow_date}, "next week" = {next_week_date}
 
-Reference dates:
-- "today" = {current_date}
-- "tomorrow" = {tomorrow_date}
-- "next week" = {next_week_date}
+RULES:
+1. DATES: If year not specified and date has passed this year, use next year.
+2. TIMES: Extract the time exactly as written. DO NOT convert timezones. Ignore timezone labels like (CET), (PT), etc.
+3. If multiple times mentioned, pick the first/primary one (ignore fallback times like "or we could do X").
+4. TITLE: Short (3-5 words), no dates/times in title.
+5. FORMAT: Times must be "HH:MM AM/PM" (e.g., "10:00 AM" not "10 AM"). Dates must be YYYY-MM-DD.
+6. END TIME: If not specified, set to 1 hour after start time.
+7. LOCATION: Use empty string "" if not specified.
+8. DESCRIPTION: Brief summary, not raw text.
 
-BEFORE extracting, reason through these steps:
-
-## STEP 1: IDENTIFY THE USER'S PERSPECTIVE
-- The USER is in {user_timezone}
-- Times labeled "your time", "my time", or unlabeled → assume {user_timezone}
-- Times labeled "his time", "her time", "their time" → another person's timezone (note but deprioritize)
-
-## STEP 2: IDENTIFY ALL DATES MENTIONED
-- List every date reference (explicit like "February 6th" or relative like "tomorrow")
-- If year not specified: check if date has passed this year → if yes, use next year
-- If day-of-week mentioned: verify it matches the date (e.g., "Thursday Feb 6" → find the Feb 6 that IS a Thursday)
-
-## STEP 3: IDENTIFY ALL TIMES MENTIONED
-- List every time with its timezone (if specified)
-- Categorize each:
-  * PRIMARY: The main/preferred time for the USER (usually mentioned first, or the one being proposed)
-  * FALLBACK: Alternative times ("if X doesn't work", "or we could do", "alternatively")
-  * OTHER_PERSON: Times explicitly in someone else's timezone ("his time", "their time")
-- Select the PRIMARY time only
-
-## STEP 4: TIMEZONE CONVERSION
-- If the time's timezone matches the user's timezone, NO conversion needed (use as-is)
-- Common equivalents (NO conversion needed between these):
-  * CET, CEST, Europe/Berlin, Europe/Paris, Europe/Amsterdam = Central European Time
-  * PT, PST, PDT, America/Los_Angeles = Pacific Time
-  * ET, EST, EDT, America/New_York = Eastern Time
-- Only convert if the time is in a DIFFERENT timezone than {user_timezone}
-- If time has no timezone specified, assume it's already in {user_timezone}
-- Output final time in {user_timezone} (DO NOT change the hour if already in user's timezone)
-
-## STEP 5: EXTRACT REMAINING DETAILS
-Title rules:
-- Short (3-5 words), captures purpose
-- No dates/times in title
-- No quotes in title
-- Examples: "Team Weekly Sync", "Coffee with David", "Doctor Appointment"
-
-Location: Physical address or meeting link, empty string if none
-Attendees: Email addresses only
-Description: Brief summary (2-5 bullet points), NOT the raw text. Focus on purpose, agenda, deliverables.
-
-## STEP 6: VALIDATE
-- Date is not in the past
-- Time format is HH:MM AM/PM (two-digit minutes like "10:00 AM", not "10 AM")
-- End time is after start time (default: 1 hour after start)
-- Use empty string "" instead of null for missing location
-
-After reasoning through all steps, call the createEvent function with your final answer.
-
-IMPORTANT: Show your reasoning for Steps 1-4 before the function call.'''
+Call createEvent with the extracted details.'''
         
         # Get completion from OpenAI with function calling
         # Using gpt-3.5-turbo for faster response times (~3x faster than gpt-4)
