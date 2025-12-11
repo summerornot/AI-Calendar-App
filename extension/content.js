@@ -45,7 +45,7 @@ function createModal(state = 'loading') {
   iframe.style.cssText = `
     border: none;
     width: 100%;
-    height: 580px;
+    height: 500px;
   `;
 
   // Create loading spinner
@@ -238,7 +238,7 @@ function updateModal(state, data = {}) {
             // Hide error, show iframe with blank form for manual entry
             errorContainer.style.display = 'none';
             iframe.style.display = 'block';
-            iframe.style.height = '580px';
+            iframe.style.height = '500px';
             
             // Send message to iframe to show blank form for manual entry
             if (iframe.contentWindow) {
@@ -255,7 +255,7 @@ function updateModal(state, data = {}) {
       break;
     case 'ready':
       iframe.style.display = 'block';
-      iframe.style.height = '580px';
+      iframe.style.height = '500px';
       
       // Send event details to the iframe if available
       if (iframe.contentWindow && data.eventDetails) {
