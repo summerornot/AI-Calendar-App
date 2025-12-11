@@ -270,9 +270,14 @@ BEFORE extracting, reason through these steps:
 - Select the PRIMARY time only
 
 ## STEP 4: TIMEZONE CONVERSION
-- Convert the selected time to {user_timezone} if needed
+- If the time's timezone matches the user's timezone, NO conversion needed (use as-is)
+- Common equivalents (NO conversion needed between these):
+  * CET, CEST, Europe/Berlin, Europe/Paris, Europe/Amsterdam = Central European Time
+  * PT, PST, PDT, America/Los_Angeles = Pacific Time
+  * ET, EST, EDT, America/New_York = Eastern Time
+- Only convert if the time is in a DIFFERENT timezone than {user_timezone}
 - If time has no timezone specified, assume it's already in {user_timezone}
-- Output final time in {user_timezone}
+- Output final time in {user_timezone} (DO NOT change the hour if already in user's timezone)
 
 ## STEP 5: EXTRACT REMAINING DETAILS
 Title rules:
