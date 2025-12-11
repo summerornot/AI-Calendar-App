@@ -247,6 +247,10 @@ async function processSelectedText(selectedText, tab) {
                      selectedText.toLowerCase().includes('evening') || 
                      selectedText.toLowerCase().includes('afternoon');
 
+        // Get user's timezone from browser
+        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        console.log('User timezone:', userTimezone);
+        
         console.log('Calling backend API for event extraction...');
         const backendResponse = await fetch('https://ai-calendar-app.onrender.com/process_event', {
           method: 'POST',
@@ -256,6 +260,7 @@ async function processSelectedText(selectedText, tab) {
           body: JSON.stringify({
             text: selectedText,
             current_time: currentTime,
+            user_timezone: userTimezone,
             context: {
               time_context: isPM ? 'pm' : (selectedText.toLowerCase().includes('am') ? 'am' : 'unknown')
             }

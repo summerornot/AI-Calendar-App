@@ -214,7 +214,7 @@ def get_mock_response(text: str, current_time: str):
             "description": ""
         }
 
-def process_text(text: str, current_time: str):
+def process_text(text: str, current_time: str, user_timezone: str = 'UTC'):
     try:
         # If no API key or client is invalid, use mock response
         if not client:
@@ -225,8 +225,12 @@ def process_text(text: str, current_time: str):
             print(f"Validated mock event details: {event.model_dump()}")
             return event.model_dump()
         
-        # Parse the current time from ISO string
-        user_tz = pytz.timezone('Europe/Berlin')
+        # Parse the current time from ISO string using user's timezone
+        try:
+            user_tz = pytz.timezone(user_timezone)
+        except pytz.UnknownTimeZoneError:
+            print(f"Unknown timezone: {user_timezone}, falling back to UTC")
+            user_tz = pytz.UTC
         user_now = datetime.fromisoformat(current_time.replace('Z', '+00:00')).astimezone(user_tz)
         current_date = user_now.strftime('%Y-%m-%d')
         
@@ -237,7 +241,7 @@ def process_text(text: str, current_time: str):
         system_prompt = f'''You are an assistant that extracts calendar event details from natural language.
 
 Current date: {current_date}
-User timezone: Europe/Berlin (UTC{user_now.strftime("%z")})
+User timezone: {user_timezone} (UTC{user_now.strftime("%z")})
 
 Use this to resolve relative dates and times:
 - "today" = {current_date}
@@ -259,7 +263,7 @@ TITLE CREATION RULES:
    - "Doctor Appointment"
 
 Rules:
-1. Convert any timezone-specific times to Europe/Berlin
+1. Convert any timezone-specific times to {user_timezone}
 2. If no end time given, set it to 1 hour after start time
 3. Times MUST be in 'HH:MM AM/PM' format with TWO-DIGIT minutes:
    Correct: "10:00 AM", "2:30 PM", "12:00 PM"
@@ -353,16 +357,19 @@ Only respond by calling the createEvent function.'''
         # Re-raise to be handled by the endpoint with partial data preservation
         raise
 
-def create_fallback_response(text: str, current_time: str, error_message: str):
+def create_fallback_response(text: str, current_time: str, error_message: str, user_timezone: str = 'UTC'):
     """
     Create a fallback response that preserves any extractable information.
     Returns partial data with an extraction_error flag for the frontend.
     """
     print(f"Creating fallback response for error: {error_message}")
     
-    # Get current date as fallback
+    # Get current date as fallback using user's timezone
     try:
-        user_tz = pytz.timezone('Europe/Berlin')
+        user_tz = pytz.timezone(user_timezone)
+    except:
+        user_tz = pytz.UTC
+    try:
         user_now = datetime.fromisoformat(current_time.replace('Z', '+00:00')).astimezone(user_tz)
         default_date = user_now.strftime('%Y-%m-%d')
     except:
@@ -418,12 +425,13 @@ def create_fallback_response(text: str, current_time: str, error_message: str):
 async def process_event(request: Request):
     text = ''
     current_time = None
-    partial_event = None  # Store any partial data extracted before failure
+    user_timezone = 'UTC'
     
     try:
         data = await request.json()
         text = data.get('text', '')
         current_time = data.get('current_time')  # ISO string from frontend
+        user_timezone = data.get('user_timezone', 'UTC')  # User's timezone from browser
         
         if not text:
             print("Error: No text provided")
@@ -433,8 +441,8 @@ async def process_event(request: Request):
             print("Error: No current time provided")
             raise HTTPException(status_code=400, detail="No current time provided")
         
-        print(f"Processing text: '{text}', current_time: '{current_time}'")
-        return process_text(text, current_time)
+        print(f"Processing text: '{text}', current_time: '{current_time}', timezone: '{user_timezone}'")
+        return process_text(text, current_time, user_timezone)
         
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
@@ -442,7 +450,7 @@ async def process_event(request: Request):
     except Exception as e:
         print(f"Error in process_event: {str(e)}")
         # Return partial extraction with error flag - preserve any extracted info
-        return create_fallback_response(text, current_time, str(e))
+        return create_fallback_response(text, current_time, str(e), user_timezone)
 
 @app.get("/health")
 async def health_check():
