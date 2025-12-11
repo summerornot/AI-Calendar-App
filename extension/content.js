@@ -45,8 +45,28 @@ function createModal(state = 'loading') {
   iframe.style.cssText = `
     border: none;
     width: 100%;
-    height: 500px;
+    height: auto;
+    min-height: 400px;
   `;
+  
+  // Auto-resize iframe based on content
+  iframe.onload = function() {
+    try {
+      const resizeIframe = () => {
+        if (iframe.contentDocument && iframe.contentDocument.body) {
+          const height = iframe.contentDocument.body.scrollHeight;
+          iframe.style.height = height + 'px';
+        }
+      };
+      resizeIframe();
+      // Also resize after a short delay to catch dynamic content
+      setTimeout(resizeIframe, 100);
+      setTimeout(resizeIframe, 300);
+    } catch (e) {
+      console.log('Could not auto-resize iframe:', e);
+      iframe.style.height = '450px';
+    }
+  };
 
   // Create loading spinner
   const loadingSpinner = document.createElement('div');
@@ -238,7 +258,6 @@ function updateModal(state, data = {}) {
             // Hide error, show iframe with blank form for manual entry
             errorContainer.style.display = 'none';
             iframe.style.display = 'block';
-            iframe.style.height = '500px';
             
             // Send message to iframe to show blank form for manual entry
             if (iframe.contentWindow) {
@@ -255,7 +274,6 @@ function updateModal(state, data = {}) {
       break;
     case 'ready':
       iframe.style.display = 'block';
-      iframe.style.height = '500px';
       
       // Send event details to the iframe if available
       if (iframe.contentWindow && data.eventDetails) {
