@@ -1,204 +1,351 @@
-// Create and inject modal HTML
+// Create the modal
 function createModal(state = 'loading') {
   // Prevent duplicate modals
   if (document.getElementById('ai-calendar-modal')) {
-    console.log('Modal already exists, updating state');
     updateModal(state);
     return;
   }
 
+  console.log('Creating modal with initial state:', state);
+
+  // Create modal container
   const modal = document.createElement('div');
   modal.id = 'ai-calendar-modal';
-  modal.innerHTML = `
-    <div class="modal-overlay">
-      <div class="modal-content">
-        ${state === 'loading' ? `
-          <div class="loading-container">
-            <div class="loading-spinner"></div>
-            <p>Processing event details...</p>
-          </div>
-        ` : `
-          <iframe src="${chrome.runtime.getURL('confirm.html')}" frameborder="0"></iframe>
-        `}
-      </div>
-    </div>
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   `;
-  document.body.appendChild(modal);
 
-  // Add styles
+  // Create modal content
+  const modalContent = document.createElement('div');
+  modalContent.id = 'ai-calendar-modal-content';
+  modalContent.style.cssText = `
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    width: 500px;
+    max-width: 90%;
+    height: auto;
+    min-height: 600px;
+    max-height: 90vh;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+  `;
+
+  // Create iframe for the form
+  const iframe = document.createElement('iframe');
+  iframe.id = 'ai-calendar-iframe';
+  iframe.src = chrome.runtime.getURL('confirm.html');
+  iframe.style.cssText = `
+    border: none;
+    width: 100%;
+    height: 600px;
+    min-height: 600px;
+    flex: 1;
+  `;
+
+  // Create loading spinner
+  const loadingSpinner = document.createElement('div');
+  loadingSpinner.id = 'ai-calendar-loading';
+  loadingSpinner.style.cssText = `
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    text-align: center;
+  `;
+
+  const spinner = document.createElement('div');
+  spinner.className = 'spinner';
+  spinner.style.cssText = `
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border-left-color: #4285F4;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+  `;
+
+  const loadingText = document.createElement('div');
+  loadingText.textContent = 'Analyzing text...';
+  loadingText.style.cssText = `
+    color: #5f6368;
+    font-size: 16px;
+    font-weight: 500;
+  `;
+
+  // Create error message container
+  const errorContainer = document.createElement('div');
+  errorContainer.id = 'ai-calendar-error';
+  errorContainer.style.cssText = `
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    text-align: center;
+  `;
+
+  const errorIcon = document.createElement('div');
+  errorIcon.innerHTML = `
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm-1-5h2v2h-2v-2zm0-8h2v6h-2V7z" fill="#EA4335"/>
+    </svg>
+  `;
+  errorIcon.style.cssText = `
+    margin-bottom: 16px;
+  `;
+
+  const errorMessage = document.createElement('div');
+  errorMessage.id = 'ai-calendar-error-message';
+  errorMessage.textContent = 'Failed to process event. Please try again.';
+  errorMessage.style.cssText = `
+    color: #5f6368;
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 16px;
+  `;
+
+  const errorButtonContainer = document.createElement('div');
+  errorButtonContainer.id = 'ai-calendar-error-buttons';
+  errorButtonContainer.style.cssText = `
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+  `;
+
+  const errorButton = document.createElement('button');
+  errorButton.textContent = 'Close';
+  errorButton.style.cssText = `
+    background-color: #5f6368;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+  `;
+  errorButton.onclick = closeModal;
+
+  const manualEntryButton = document.createElement('button');
+  manualEntryButton.id = 'ai-calendar-manual-entry-btn';
+  manualEntryButton.textContent = 'Enter Manually';
+  manualEntryButton.style.cssText = `
+    background-color: #4285F4;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+    display: none;
+  `;
+
+  errorButtonContainer.appendChild(errorButton);
+  errorButtonContainer.appendChild(manualEntryButton);
+
+  // Add animation style
   const style = document.createElement('style');
   style.textContent = `
-    #ai-calendar-modal .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 999999;
-    }
-
-    #ai-calendar-modal .modal-content {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 24px 38px 3px rgba(0,0,0,0.14), 
-                  0 9px 46px 8px rgba(0,0,0,0.12), 
-                  0 11px 15px -7px rgba(0,0,0,0.2);
-      width: 500px;
-      height: 600px;
-      max-width: 95vw;
-      max-height: 95vh;
-      overflow: hidden;
-    }
-
-    #ai-calendar-modal .loading-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      color: #5f6368;
-      font-family: 'Google Sans', Roboto, Arial, sans-serif;
-    }
-
-    #ai-calendar-modal .loading-spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #4285f4;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 16px;
-    }
-
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
-
-    #ai-calendar-modal iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-
-    #ai-calendar-modal .error-icon {
-      font-size: 40px;
-      color: #f44336;
-      margin-bottom: 16px;
-    }
-
-    #ai-calendar-modal .error-message {
-      color: #f44336;
-      font-size: 16px;
-      margin-bottom: 16px;
-    }
-
-    #ai-calendar-modal .close-button {
-      background-color: #f44336;
-      color: white;
-      border: none;
-      padding: 8px 16px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-
-    #ai-calendar-modal .close-button:hover {
-      background-color: #e91e63;
-    }
-
-    @media (max-width: 480px) {
-      #ai-calendar-modal .modal-content {
-        width: 100%;
-        height: 100%;
-        max-width: 100vw;
-        max-height: 100vh;
-        border-radius: 0;
-      }
-    }
   `;
+
+  // Assemble the modal
+  loadingSpinner.appendChild(spinner);
+  loadingSpinner.appendChild(loadingText);
+
+  errorContainer.appendChild(errorIcon);
+  errorContainer.appendChild(errorMessage);
+  errorContainer.appendChild(errorButtonContainer);
+
+  modalContent.appendChild(loadingSpinner);
+  modalContent.appendChild(errorContainer);
+  modalContent.appendChild(iframe);
+
+  modal.appendChild(modalContent);
+  document.body.appendChild(modal);
   document.head.appendChild(style);
 
-  // Handle iframe messages
-  window.addEventListener('message', function(event) {
-    if (event.data.action === 'closeModal') {
+  // Set initial state
+  updateModal(state);
+
+  // Close when clicking outside the modal content
+  modal.addEventListener('click', function(event) {
+    if (event.target === modal) {
       closeModal();
     }
   });
 
-  // Close modal when clicking outside
-  modal.querySelector('.modal-overlay').addEventListener('click', (e) => {
-    if (e.target.classList.contains('modal-overlay')) {
+  // Close when pressing Escape
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
       closeModal();
     }
   });
 
-  // Close modal on escape key
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      closeModal();
-    }
-  });
+  return modal;
 }
 
-// Close modal
+// Update the modal state
+function updateModal(state, data = {}) {
+  console.log('Updating modal state to:', state, data);
+  
+  const modal = document.getElementById('ai-calendar-modal');
+  if (!modal) {
+    console.error('Modal not found, creating it');
+    createModal(state);
+    return;
+  }
+
+  const loadingSpinner = document.getElementById('ai-calendar-loading');
+  const errorContainer = document.getElementById('ai-calendar-error');
+  const iframe = document.getElementById('ai-calendar-iframe');
+  const errorMessage = document.getElementById('ai-calendar-error-message');
+
+  // Reset all elements
+  loadingSpinner.style.display = 'none';
+  errorContainer.style.display = 'none';
+  iframe.style.display = 'none';
+
+  // Update based on state
+  switch (state) {
+    case 'loading':
+      loadingSpinner.style.display = 'flex';
+      break;
+    case 'error':
+      errorContainer.style.display = 'flex';
+      if (data.error) {
+        errorMessage.textContent = data.error;
+      }
+      
+      // Show manual entry button if allowed
+      const manualEntryBtn = document.getElementById('ai-calendar-manual-entry-btn');
+      if (manualEntryBtn) {
+        if (data.allowManualEntry) {
+          manualEntryBtn.style.display = 'block';
+          manualEntryBtn.onclick = () => {
+            // Hide error, show iframe with blank form for manual entry
+            errorContainer.style.display = 'none';
+            iframe.style.display = 'block';
+            iframe.style.height = '600px';
+            
+            // Send message to iframe to show blank form for manual entry
+            if (iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                action: 'showManualEntryForm',
+                selectedText: data.selectedText || ''
+              }, '*');
+            }
+          };
+        } else {
+          manualEntryBtn.style.display = 'none';
+        }
+      }
+      break;
+    case 'ready':
+      iframe.style.display = 'block';
+      iframe.style.height = '600px';
+      
+      // Send event details to the iframe if available
+      if (iframe.contentWindow && data.eventDetails) {
+        console.log('Sending event details to iframe:', data.eventDetails);
+        iframe.contentWindow.postMessage({
+          action: 'fillForm',
+          eventDetails: data.eventDetails
+        }, '*');
+      } else {
+        console.log('No event details to send to iframe or iframe not ready');
+      }
+      
+      // Force resize after a short delay to ensure content is visible
+      setTimeout(() => {
+        const modalContent = document.getElementById('ai-calendar-modal-content');
+        if (modalContent) {
+          modalContent.style.height = 'auto';
+          modalContent.style.minHeight = '600px';
+        }
+        iframe.style.height = '600px';
+        console.log('Forced resize of modal content and iframe');
+      }, 300);
+      break;
+    default:
+      console.error('Unknown modal state:', state);
+      break;
+  }
+}
+
+// Close the modal
 function closeModal() {
   const modal = document.getElementById('ai-calendar-modal');
   if (modal) {
     modal.remove();
   }
-}
-
-// Update modal state
-function updateModal(state, error) {
-  const modal = document.getElementById('ai-calendar-modal');
-  if (modal) {
-    const content = modal.querySelector('.modal-content');
-    
-    if (state === 'loading') {
-      content.innerHTML = `
-        <div class="loading-container">
-          <div class="loading-spinner"></div>
-          <p>Processing event details...</p>
-        </div>
-      `;
-    } else if (state === 'error') {
-      content.innerHTML = `
-        <div class="loading-container">
-          <div class="error-icon">❌</div>
-          <p class="error-message">${error || 'An error occurred'}</p>
-          <button class="close-button">Close</button>
-        </div>
-      `;
-      // Add event listener to close button
-      setTimeout(() => {
-        const closeButton = content.querySelector('.close-button');
-        if (closeButton) {
-          closeButton.addEventListener('click', closeModal);
-        }
-      }, 0);
-    } else {
-      content.innerHTML = `
-        <iframe src="${chrome.runtime.getURL('confirm.html')}" frameborder="0"></iframe>
-      `;
+  
+  // Remove event listener for Escape key
+  document.removeEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+      closeModal();
     }
-  }
+  });
 }
 
-// Listen for messages from background script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+// Show the modal
+function showModal(state = 'loading') {
+  // First, ensure any existing modal is completely removed
+  closeModal();
+  
+  // Then create a fresh modal
+  createModal(state);
+}
+
+// Listen for messages from the background script
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+  console.log('Content script received message:', request);
+  
   if (request.action === 'showModal') {
-    createModal(request.state);
+    showModal(request.state);
     sendResponse({ success: true });
   } else if (request.action === 'updateModal') {
-    updateModal(request.state, request.error);
+    updateModal(request.state, request);
     sendResponse({ success: true });
   } else if (request.action === 'closeModal') {
     closeModal();
     sendResponse({ success: true });
   }
-  return true;
+  
+  return true; // Keep the message channel open for async response
 });
+
+// Listen for messages from the iframe
+window.addEventListener('message', function(event) {
+  // Only accept messages from our iframe
+  if (event.source !== document.getElementById('ai-calendar-iframe')?.contentWindow) {
+    return;
+  }
+  
+  console.log('Content script received message from iframe:', event.data.action);
+  
+  if (event.data.action === 'closeModal') {
+    console.log('Closing modal from iframe request');
+    closeModal();
+  }
+});
+
+console.log('AI Calendar content script loaded');

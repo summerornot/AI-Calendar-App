@@ -1,8 +1,5 @@
 // Global variables
-let pendingEvent = null;
 let selectedText = '';
-let currentTabId = null;
-let eventCache = {}; // Cache for event extraction results
 
 // Constants for context menu
 const CONTEXT_MENU_ID = 'addToCalendar';
@@ -75,16 +72,18 @@ function keepAlive() {
 function initializeGoogleAuth() {
   console.log('Initializing Google Calendar API authorization');
   
-  // Get the extension ID for proper redirect URI
+  // Get the extension ID for reference
   const extensionId = chrome.runtime.id;
   console.log('Extension ID:', extensionId);
   
-  // Check if we need to authorize
-  chrome.identity.getAuthToken({ interactive: false }, (token) => {
+  // Check if already authorized
+  chrome.identity.getAuthToken({ interactive: false }, function(token) {
     if (chrome.runtime.lastError || !token) {
       console.log('Not currently authorized with Google Calendar');
     } else {
       console.log('Already authorized with Google Calendar');
+      // Store authentication status
+      chrome.storage.local.set({ 'isAuthenticated': true });
     }
   });
 }
@@ -185,11 +184,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.log('Selected text:', selectedText);
 
     try {
-      // Clear any previous pending event to prevent showing old data
-      chrome.storage.local.remove('pendingEvent', () => {
-        console.log('Cleared previous pendingEvent from storage');
-      });
-
       // Inject content script if not already injected
       chrome.scripting.executeScript({
         target: { tabId: tab.id },
@@ -231,132 +225,121 @@ async function processSelectedText(selectedText, tab) {
       
       console.log('Loading modal displayed successfully');
       
-      // Check cache first
-      const cachedEvent = await checkCache(selectedText);
+      // Check cache first for faster response
+      const cachedEvent = await getCachedEvent(selectedText);
       if (cachedEvent) {
         console.log('Using cached event data:', cachedEvent);
         await processEventDetails(cachedEvent, tab.id);
         return;
       }
       
-      // Try local extraction first as a fallback
-      console.log('Attempting basic local event extraction');
-      const localEvent = basicLocalEventExtraction(selectedText, currentTime);
+      // Always use backend for event extraction - no local fallback
+      let eventDetails;
       
       try {
         // Attempt to fetch from backend with timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-        
-        const response = await fetch('https://ai-calendar-app.onrender.com/process_event', {
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
+        // Check if text explicitly mentions PM for context
+        const isPM = selectedText.toLowerCase().includes('pm') || 
+                     selectedText.toLowerCase().includes('p.m.') || 
+                     selectedText.toLowerCase().includes('evening') || 
+                     selectedText.toLowerCase().includes('afternoon');
+
+        console.log('Calling backend API for event extraction...');
+        const backendResponse = await fetch('https://ai-calendar-app.onrender.com/process_event', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             text: selectedText,
-            current_time: currentTime
+            current_time: currentTime,
+            context: {
+              time_context: isPM ? 'pm' : (selectedText.toLowerCase().includes('am') ? 'am' : 'unknown')
+            }
           }),
           signal: controller.signal
         });
         
         clearTimeout(timeoutId); // Clear the timeout if the request completes
         
-        console.log('Backend response status:', response.status);
+        console.log('Backend response status:', backendResponse.status);
         
         // Check if response is OK before parsing JSON
-        if (!response.ok) {
-          throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        if (!backendResponse.ok) {
+          const errorText = await backendResponse.text().catch(() => 'Unknown error');
+          throw new Error(`Server returned ${backendResponse.status}: ${backendResponse.statusText}. ${errorText}`);
         }
         
-        const eventDetails = await response.json();
+        eventDetails = await backendResponse.json();
         console.log('Backend response:', eventDetails);
         
-        // Ensure the event data has the expected format
+        // Store the raw text for reference
+        eventDetails.rawText = selectedText;
+        
+        // Normalize the event data from backend response
         const normalizedEvent = {
-          title: eventDetails.title || `Event from text: ${selectedText.substring(0, 30)}...`,
-          date: eventDetails.date || new Date().toISOString().split('T')[0], // YYYY-MM-DD format
-          startTime: eventDetails.startTime || '12:00 PM',
-          endTime: eventDetails.endTime || '1:00 PM',
+          title: eventDetails.title || 'Untitled Event',
+          date: eventDetails.date || new Date().toISOString().split('T')[0],
+          startTime: eventDetails.startTime || eventDetails.start_time || '12:00 PM',
+          endTime: eventDetails.endTime || eventDetails.end_time || '1:00 PM',
           location: eventDetails.location || '',
-          description: eventDetails.description || selectedText,
-          attendees: eventDetails.attendees || []
+          description: eventDetails.description || '',
+          attendees: eventDetails.attendees || [],
+          rawText: selectedText
         };
         
-        console.log('Normalized event data:', normalizedEvent);
+        console.log('Normalized event data from backend:', normalizedEvent);
         
-        // Cache the result from the backend
+        // Cache the result
         cacheEvent(selectedText, normalizedEvent);
         
         // Validate time formats before proceeding
-        validateTimeFormat(normalizedEvent.startTime);
-        validateTimeFormat(normalizedEvent.endTime);
-        
-        await processEventDetails(normalizedEvent, tab.id);
-      } catch (error) {
-        console.error('Backend fetch error:', error);
-        
-        // Check if this is an abort error (timeout)
-        const errorMessage = error.name === 'AbortError' 
-          ? 'Backend request timed out. Using basic extraction instead. Some details may be missing.' 
-          : 'Backend service unavailable. Using basic extraction instead. Some details may be missing.';
-        
-        console.log(errorMessage);
-        
-        // If we have a local extraction result, use it as fallback
-        if (localEvent && localEvent.title) {
-          console.log('Using local event extraction as fallback:', localEvent);
-          
-          // Normalize the local event data to ensure consistent format
-          const normalizedLocalEvent = {
-            title: localEvent.title || `Event from text: ${selectedText.substring(0, 30)}...`,
-            date: localEvent.date || new Date().toISOString().split('T')[0],
-            startTime: localEvent.startTime || '12:00 PM',
-            endTime: localEvent.endTime || '1:00 PM',
-            location: localEvent.location || '',
-            description: localEvent.description || selectedText,
-            attendees: localEvent.attendees || []
-          };
-          
-          console.log('Normalized local event data:', normalizedLocalEvent);
-          
-          // Show a warning that we're using local extraction
-          chrome.tabs.sendMessage(tab.id, {
-            action: 'updateModal',
-            state: 'warning',
-            message: error.name === 'AbortError' 
-              ? 'Backend request timed out. Using basic extraction instead. Some details may be missing.' 
-              : 'Backend service unavailable. Using basic extraction instead. Some details may be missing.',
-            eventDetails: normalizedLocalEvent
-          });
-          
-          // Cache the local result
-          cacheEvent(selectedText, normalizedLocalEvent);
-          
-          await processEventDetails(normalizedLocalEvent, tab.id);
-        } else {
-          // Show error in modal
-          chrome.tabs.sendMessage(tab.id, {
-            action: 'updateModal',
-            state: 'error',
-            error: `Unable to process event: ${error.message}. Please try again later.`
-          }, (response) => {
-            if (chrome.runtime.lastError) {
-              console.error('Error sending error message:', chrome.runtime.lastError);
-            }
-          });
+        try {
+          validateTimeFormat(normalizedEvent.startTime);
+          validateTimeFormat(normalizedEvent.endTime);
+        } catch (timeError) {
+          console.warn('Time format validation warning:', timeError.message);
+          // Don't fail - let the user correct in the form
         }
+        
+        // Process the event details
+        await processEventDetails(normalizedEvent, tab.id);
+        
+      } catch (backendError) {
+        // Backend failed - show explicit error, do NOT fall back to local extraction
+        console.error('Backend API error:', backendError);
+        
+        let errorMessage = 'AI backend is unavailable. Please try again later.';
+        
+        if (backendError.name === 'AbortError') {
+          errorMessage = 'Request timed out. The AI backend is taking too long to respond. Please try again.';
+        } else if (backendError.message.includes('Failed to fetch') || backendError.message.includes('NetworkError')) {
+          errorMessage = 'Unable to connect to the AI backend. Please check your internet connection and try again.';
+        } else if (backendError.message.includes('Server returned')) {
+          errorMessage = `AI backend error: ${backendError.message}`;
+        }
+        
+        console.log('Showing error state to user:', errorMessage);
+        
+        // Update modal to show error state with option for manual entry
+        chrome.tabs.sendMessage(tab.id, {
+          action: 'updateModal',
+          state: 'error',
+          error: errorMessage,
+          allowManualEntry: true,
+          selectedText: selectedText
+        });
       }
     });
   } catch (error) {
-    console.error('Error in processSelectedText:', error);
-    
-    // Show error notification
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icons/icon128.png',
-      title: 'Calendar Extension Error',
-      message: `Error processing text: ${error.message}`
+    console.error('Error processing selected text:', error);
+    chrome.tabs.sendMessage(tab.id, {
+      action: 'showModal',
+      state: 'error',
+      error: 'Error processing text. Please try again.'
     });
   }
 }
@@ -365,6 +348,10 @@ async function processSelectedText(selectedText, tab) {
 async function processEventDetails(eventDetails, tabId) {
   try {
     console.log('Processing event details:', eventDetails);
+    
+    // Log the final event details (no local title/description generation)
+    console.log('Final event title:', eventDetails.title);
+    console.log('Final event description:', eventDetails.description);
     
     // Store event details
     chrome.storage.local.set({ eventDetails }, () => {
@@ -398,288 +385,9 @@ async function processEventDetails(eventDetails, tabId) {
   }
 }
 
-// Basic local event extraction
-function basicLocalEventExtraction(text, currentTime) {
-  console.log('Attempting basic local event extraction');
-  
-  // Cache for performance
-  if (eventCache[text]) {
-    console.log('Using cached event data');
-    return eventCache[text];
-  }
-  
-  // Initialize event object
-  const event = {
-    title: '',
-    date: '',
-    startTime: '',
-    endTime: '',
-    location: '',
-    description: text,
-    attendees: []
-  };
-  
-  // Extract date patterns - prioritize YYYY-MM-DD format
-  const datePatterns = [
-    /(\d{4})-(\d{1,2})-(\d{1,2})/, // YYYY-MM-DD
-    /(\d{1,2})\/(\d{1,2})\/(\d{4})/, // MM/DD/YYYY
-    /(\d{1,2})\/(\d{1,2})\/(\d{2})/, // MM/DD/YY
-    /(\d{1,2})-(\d{1,2})-(\d{4})/, // DD-MM-YYYY
-    /(\d{1,2})-(\d{1,2})-(\d{2})/, // DD-MM-YY
-    /tomorrow/i, // Tomorrow
-    /today/i, // Today
-    /next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i, // Next day of week
-    /(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i // Day of week
-  ];
-  
-  // Try to extract date
-  let dateFound = false;
-  for (const pattern of datePatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      if (pattern.toString().includes('tomorrow')) {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        event.date = tomorrow.toISOString().split('T')[0];
-        dateFound = true;
-        break;
-      } else if (pattern.toString().includes('today')) {
-        const today = new Date();
-        event.date = today.toISOString().split('T')[0];
-        dateFound = true;
-        break;
-      } else if (pattern.toString().includes('next')) {
-        const dayOfWeek = match[1].toLowerCase();
-        const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-        const today = new Date();
-        const todayDayIndex = today.getDay();
-        const targetDayIndex = daysOfWeek.indexOf(dayOfWeek);
-        let daysToAdd = targetDayIndex - todayDayIndex;
-        if (daysToAdd <= 0) daysToAdd += 7;
-        const targetDate = new Date();
-        targetDate.setDate(today.getDate() + daysToAdd);
-        event.date = targetDate.toISOString().split('T')[0];
-        dateFound = true;
-        break;
-      } else if (pattern.toString().includes('monday|tuesday')) {
-        const dayOfWeek = match[0].toLowerCase();
-        const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-        const today = new Date();
-        const todayDayIndex = today.getDay();
-        const targetDayIndex = daysOfWeek.indexOf(dayOfWeek);
-        let daysToAdd = targetDayIndex - todayDayIndex;
-        if (daysToAdd <= 0) daysToAdd += 7;
-        const targetDate = new Date();
-        targetDate.setDate(today.getDate() + daysToAdd);
-        event.date = targetDate.toISOString().split('T')[0];
-        dateFound = true;
-        break;
-      } else {
-        // Handle numeric date formats
-        try {
-          let year, month, day;
-          if (pattern.toString().includes('YYYY-MM-DD')) {
-            [, year, month, day] = match;
-          } else if (pattern.toString().includes('MM/DD/YYYY') || pattern.toString().includes('MM/DD/YY')) {
-            [, month, day, year] = match;
-            if (year.length === 2) year = '20' + year;
-          } else if (pattern.toString().includes('DD-MM-YYYY') || pattern.toString().includes('DD-MM-YY')) {
-            [, day, month, year] = match;
-            if (year.length === 2) year = '20' + year;
-          }
-          
-          // Ensure proper formatting
-          month = month.padStart(2, '0');
-          day = day.padStart(2, '0');
-          
-          event.date = `${year}-${month}-${day}`;
-          dateFound = true;
-          break;
-        } catch (e) {
-          console.error('Error parsing date:', e);
-        }
-      }
-    }
-  }
-  
-  // If no date found, use tomorrow as default
-  if (!dateFound) {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    event.date = tomorrow.toISOString().split('T')[0];
-  }
-  
-  // Extract time patterns - look for common time formats
-  const timePatterns = [
-    /(\d{1,2}):(\d{2})\s*(am|pm)/i, // 3:30 pm
-    /(\d{1,2})\s*(am|pm)/i, // 3 pm
-    /(\d{1,2}):(\d{2})/i, // 15:30 (24-hour)
-    /at\s+(\d{1,2}):?(\d{2})?\s*(am|pm)?/i, // at 3:30 pm or at 3 pm
-    /from\s+(\d{1,2}):?(\d{2})?\s*(am|pm)?/i // from 3:30 pm or from 3 pm
-  ];
-  
-  // Try to extract start time
-  let startTimeFound = false;
-  for (const pattern of timePatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      try {
-        let hours = parseInt(match[1]);
-        let minutes = match[2] ? parseInt(match[2]) : 0;
-        let period = match[3] ? match[3].toLowerCase() : null;
-        
-        // Handle 24-hour format
-        if (!period && hours >= 0 && hours <= 23) {
-          period = hours >= 12 ? 'pm' : 'am';
-          if (hours > 12) hours -= 12;
-          if (hours === 0) hours = 12;
-        }
-        
-        // Handle 12-hour format
-        if (period === 'pm' && hours < 12) hours += 12;
-        if (period === 'am' && hours === 12) hours = 0;
-        
-        // Format the time
-        const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
-        const formattedMinutes = minutes.toString().padStart(2, '0');
-        const formattedPeriod = hours >= 12 ? 'PM' : 'AM';
-        
-        event.startTime = `${formattedHours}:${formattedMinutes} ${formattedPeriod}`;
-        startTimeFound = true;
-        
-        // Set end time to 1 hour after start time
-        const endHours = (hours + 1) % 24;
-        const endFormattedHours = endHours % 12 === 0 ? 12 : endHours % 12;
-        const endFormattedPeriod = endHours >= 12 ? 'PM' : 'AM';
-        
-        event.endTime = `${endFormattedHours}:${formattedMinutes} ${endFormattedPeriod}`;
-        break;
-      } catch (e) {
-        console.error('Error parsing time:', e);
-      }
-    }
-  }
-  
-  // If no start time found, use current hour + 1 as default
-  if (!startTimeFound) {
-    const now = new Date();
-    const hours = now.getHours();
-    const nextHour = (hours + 1) % 24;
-    
-    const startFormattedHours = hours % 12 === 0 ? 12 : hours % 12;
-    const startFormattedPeriod = hours >= 12 ? 'PM' : 'AM';
-    event.startTime = `${startFormattedHours}:00 ${startFormattedPeriod}`;
-    
-    const endFormattedHours = nextHour % 12 === 0 ? 12 : nextHour % 12;
-    const endFormattedPeriod = nextHour >= 12 ? 'PM' : 'AM';
-    event.endTime = `${endFormattedHours}:00 ${endFormattedPeriod}`;
-  }
-  
-  // Extract location - look for common location indicators
-  const locationPatterns = [
-    /at\s+([^,.]+(?:street|st|avenue|ave|road|rd|boulevard|blvd|lane|ln|drive|dr|court|ct|plaza|square|sq|highway|hwy|parkway|pkwy))/i,
-    /at\s+([^,.]+(?:cafe|restaurant|coffee|hotel|building|office|center|centre|mall|park|library|school|university|college|hospital|clinic|theater|theatre|cinema|stadium|arena|hall))/i,
-    /location:?\s+([^,.]+)/i,
-    /place:?\s+([^,.]+)/i,
-    /venue:?\s+([^,.]+)/i,
-    /address:?\s+([^,.]+)/i
-  ];
-  
-  // Try to extract location
-  for (const pattern of locationPatterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      event.location = match[1].trim();
-      break;
-    }
-  }
-  
-  // Extract title - use first line or first sentence
-  const titlePatterns = [
-    /^([^.!?\n]+)/, // First sentence
-    /subject:?\s+([^.!?\n]+)/i, // Subject: ...
-    /title:?\s+([^.!?\n]+)/i, // Title: ...
-    /re:?\s+([^.!?\n]+)/i, // Re: ...
-    /about:?\s+([^.!?\n]+)/i // About: ...
-  ];
-  
-  // Try to extract title
-  for (const pattern of titlePatterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      event.title = match[1].trim();
-      break;
-    }
-  }
-  
-  // If no title found, create one based on date and time
-  if (!event.title) {
-    event.title = `Event on ${event.date} at ${event.startTime}`;
-  }
-  
-  // Extract attendees - look for email addresses or "with" phrases
-  const attendeePatterns = [
-    /with\s+([^,.]+)/i, // with John, Mary
-    /(?:[\w\.-]+@[\w\.-]+\.\w+)/g, // email addresses
-    /attendees:?\s+([^.!?\n]+)/i, // Attendees: John, Mary
-    /participants:?\s+([^.!?\n]+)/i, // Participants: John, Mary
-    /guests:?\s+([^.!?\n]+)/i // Guests: John, Mary
-  ];
-  
-  // Try to extract attendees
-  for (const pattern of attendeePatterns) {
-    const matches = text.match(pattern);
-    if (matches) {
-      if (pattern.toString().includes('with') || pattern.toString().includes('attendees') || 
-          pattern.toString().includes('participants') || pattern.toString().includes('guests')) {
-        // Handle "with John, Mary" format
-        const attendeeText = matches[1];
-        const attendeeList = attendeeText.split(/,|and/).map(name => name.trim()).filter(name => name);
-        event.attendees = [...event.attendees, ...attendeeList];
-      } else {
-        // Handle email addresses
-        event.attendees = [...event.attendees, ...matches];
-      }
-      break;
-    }
-  }
-  
-  // Cache the result for future use
-  eventCache[text] = event;
-  
-  return event;
-}
-
-// Helper function to extract participants from conversation
-function extractParticipants(text) {
-  const participants = new Set();
-  
-  // Look for name patterns in conversation format
-  const nameRegex = /\b([A-Z][a-z]+)(?:\s+[A-Z][a-z]+)?\s*:/g;
-  const nameMatches = [...text.matchAll(nameRegex)];
-  
-  nameMatches.forEach(match => {
-    const name = match[1].trim();
-    if (name !== 'You' && name !== 'I') {
-      participants.add(name);
-    }
-  });
-  
-  // Look for mentions of looping in or including someone
-  const loopMatches = [
-    ...text.matchAll(/\b(?:loop in|include|invite|adding)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gi),
-    ...text.matchAll(/\bI'll\s+(?:also\s+)?(?:add|invite)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gi)
-  ];
-  
-  loopMatches.forEach(match => {
-    const name = match[1].trim();
-    if (name !== 'you' && name !== 'myself') {
-      participants.add(name);
-    }
-  });
-  
-  return Array.from(participants);
-}
+// NOTE: Local extraction functions have been removed.
+// The extension now relies solely on the backend API for event extraction.
+// If the backend fails, an explicit error is shown to the user.
 
 // Validate time format
 function validateTimeFormat(timeStr) {
@@ -710,7 +418,27 @@ function validateTimeFormat(timeStr) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('Background script received message:', request.action);
   
-  if (request.action === 'createEvent') {
+  // Handle different message types
+  if (request.action === 'processSelectedText') {
+    // Clear any cached event data to ensure fresh extraction
+    console.log('Clearing event cache to ensure fresh extraction');
+    chrome.storage.local.remove(EVENT_CACHE_KEY);
+    
+    // Process the selected text
+    selectedText = request.text;
+    console.log('Selected text:', selectedText);
+    
+    // Clear any previous pending event
+    chrome.storage.local.remove('pendingEvent', () => {
+      console.log('Cleared previous pendingEvent from storage');
+    });
+    
+    // Process the text and show the modal
+    processSelectedText(selectedText, sender.tab);
+    
+    // Send response
+    sendResponse({ success: true });
+  } else if (request.action === 'createEvent') {
     console.log('Received createEvent request with details:', request.eventDetails);
     
     // Debug the event details thoroughly
@@ -760,18 +488,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       
     // CRITICAL: Return true to indicate we will send a response asynchronously
     return true;
-  } else if (request.action === 'showLoadingModal') {
-    // Handle showLoadingModal message
-    console.log('Received showLoadingModal request');
-    return false; // Synchronous response
-  } else if (request.action === 'showConfirmModal') {
-    // Handle showConfirmModal message
-    console.log('Received showConfirmModal request');
-    return false; // Synchronous response
-  } else if (request.action === 'closeModal') {
-    // Handle closeModal message
-    console.log('Received closeModal request');
-    return false; // Synchronous response
   } else if (request.action === 'checkAuthStatus') {
     // Check if we have a valid auth token
     chrome.identity.getAuthToken({ interactive: false }, (token) => {
@@ -780,6 +496,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ isAuthenticated: false });
       } else {
         console.log('User is authenticated with Google Calendar');
+        // Store authentication status for persistence
+        chrome.storage.local.set({ 'isAuthenticated': true });
         sendResponse({ isAuthenticated: true });
       }
     });
@@ -789,12 +507,32 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Explicitly trigger the authentication flow
     console.log('Initiating Google Calendar authentication flow');
     
-    chrome.identity.getAuthToken({ interactive: true }, (token) => {
-      if (chrome.runtime.lastError || !token) {
-        console.error('Authentication failed:', chrome.runtime.lastError);
-        sendResponse({ success: false, error: chrome.runtime.lastError?.message || 'Authentication failed' });
+    // Use the correct TokenDetails format
+    chrome.identity.getAuthToken({ 
+      interactive: true,
+    }, (token) => {
+      // Log detailed information about the authentication attempt
+      if (chrome.runtime.lastError) {
+        const error = chrome.runtime.lastError;
+        console.error('Authentication failed with error:', error);
+        console.error('Error details:', JSON.stringify(error));
+        sendResponse({ 
+          success: false, 
+          error: error.message || 'Authentication failed',
+          details: JSON.stringify(error)
+        });
+      } else if (!token) {
+        console.error('No token received from authentication');
+        sendResponse({ 
+          success: false, 
+          error: 'No authentication token received' 
+        });
       } else {
         console.log('Authentication successful, token received');
+        // Store a flag indicating successful authentication
+        chrome.storage.local.set({ 'isAuthenticated': true }, () => {
+          console.log('Stored authentication status in local storage');
+        });
         sendResponse({ success: true });
       }
     });
@@ -810,147 +548,84 @@ async function createCalendarEvent(eventDetails) {
     // Get OAuth token with more detailed error logging
     console.log('Getting OAuth token...');
     
-    // Use a more robust approach to get the token
-    const getToken = () => {
-      return new Promise((resolve, reject) => {
-        // First check if we're authenticated
-        chrome.identity.getAuthToken({ interactive: false }, (token) => {
-          if (chrome.runtime.lastError || !token) {
-            console.log('Not authenticated or token missing, requesting interactive auth');
-            
-            // Request interactive authentication
-            chrome.identity.getAuthToken({ interactive: true }, (interactiveToken) => {
-              if (chrome.runtime.lastError) {
-                console.error('Interactive OAuth error:', chrome.runtime.lastError);
-                console.error('Error details:', JSON.stringify(chrome.runtime.lastError));
-                reject(new Error(`Authentication failed: ${chrome.runtime.lastError.message}`));
-              } else if (!interactiveToken) {
-                console.error('No token received from interactive auth');
-                reject(new Error('Failed to get authentication token'));
-              } else {
-                console.log('Successfully obtained token through interactive auth');
-                resolve(interactiveToken);
-              }
-            });
-          } else {
-            console.log('Already authenticated, using existing token');
-            resolve(token);
-          }
-        });
+    // Use a direct approach to get the token
+    const token = await new Promise((resolve, reject) => {
+      chrome.identity.getAuthToken({ interactive: true }, (token) => {
+        if (chrome.runtime.lastError) {
+          console.error('OAuth error:', chrome.runtime.lastError);
+          console.error('Error details:', JSON.stringify(chrome.runtime.lastError));
+          reject(new Error(`Authentication failed: ${chrome.runtime.lastError.message}`));
+        } else if (!token) {
+          console.error('No token received');
+          reject(new Error('Failed to get authentication token'));
+        } else {
+          console.log('Successfully obtained token');
+          // Store authentication status
+          chrome.storage.local.set({ 'isAuthenticated': true });
+          resolve(token);
+        }
       });
-    };
+    });
     
-    const token = await getToken();
-    console.log('Got OAuth token:', token ? 'Token received' : 'No token received');
+    // Parse event times into ISO format
+    const parsedEvent = parseEventTimes(eventDetails);
     
-    // Validate required fields
-    if (!eventDetails.title || !eventDetails.date || !eventDetails.startTime) {
-      throw new Error('Missing required fields: title, date, and startTime are required');
-    }
-
-    // Parse times
-    const { startDateTime, endDateTime } = parseEventTimes(eventDetails);
+    // Create the event in Google Calendar
+    console.log('Creating event with parsed details:', parsedEvent);
     
-    // Get timezone
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    
-    // Create event object
+    // Prepare the event data
     const event = {
-      summary: eventDetails.title,
-      description: eventDetails.description || '',
-      location: eventDetails.location || '',
-      start: {
-        dateTime: startDateTime,
-        timeZone
+      'summary': parsedEvent.title || 'Untitled Event',
+      'location': parsedEvent.location || '',
+      'description': parsedEvent.description || '',
+      'start': {
+        'dateTime': parsedEvent.startDateTime,
+        'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone
       },
-      end: {
-        dateTime: endDateTime,
-        timeZone
+      'end': {
+        'dateTime': parsedEvent.endDateTime,
+        'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone
       }
     };
-
-    if (eventDetails.attendees && eventDetails.attendees.length > 0) {
-      event.attendees = eventDetails.attendees.map(email => ({ email }));
-    }
-
-    console.log('Formatted event:', event);
-
-    // Create event with more detailed error handling
-    console.log('Sending request to Google Calendar API...');
-    try {
-      const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(event)
+    
+    // Add attendees if present
+    if (parsedEvent.attendees && parsedEvent.attendees.length > 0) {
+      event.attendees = parsedEvent.attendees.map(attendee => {
+        // Check if it's already an object with email property
+        if (typeof attendee === 'object' && attendee.email) {
+          return attendee;
+        }
+        // Otherwise, assume it's an email string
+        return { 'email': attendee };
       });
-
-      console.log('Google Calendar API response status:', response.status);
-      
-      // Handle non-JSON responses
-      let responseData;
-      let responseText;
-      
-      try {
-        // First try to get the raw text for debugging
-        responseText = await response.text();
-        console.log('Raw response text:', responseText);
-        
-        // Then parse as JSON if possible
-        try {
-          responseData = JSON.parse(responseText);
-          console.log('Google Calendar API response:', responseData);
-        } catch (parseError) {
-          console.error('Failed to parse response as JSON:', parseError);
-        }
-      } catch (e) {
-        console.error('Failed to read response text:', e);
-      }
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          // Token expired, clear it and try again
-          console.log('Token expired, clearing cache');
-          await new Promise(resolve => {
-            chrome.identity.clearAllCachedAuthTokens(resolve);
-          });
-          throw new Error('Authentication token expired. Please try again.');
-        }
-        
-        // Provide more detailed error information
-        const errorMessage = responseData && responseData.error 
-          ? `${responseData.error.message || 'Unknown error'} (code: ${responseData.error.code || 'unknown'})`
-          : `HTTP error ${response.status}`;
-          
-        throw new Error(`Failed to create calendar event: ${errorMessage}`);
-      }
-
-      return { success: true, eventId: responseData?.id };
-    } catch (fetchError) {
-      console.error('Fetch error:', fetchError);
-      throw fetchError;
     }
+    
+    // Log the final event data being sent to Google Calendar
+    console.log('Sending event data to Google Calendar:', JSON.stringify(event, null, 2));
+    
+    // Make the API request to create the event
+    const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(event)
+    });
+    
+    // Check if the request was successful
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Error response from Google Calendar API:', errorData);
+      throw new Error(`Google Calendar API error: ${errorData.error?.message || 'Unknown error'}`);
+    }
+    
+    // Parse and return the response
+    const data = await response.json();
+    console.log('Event created successfully:', data);
+    return { success: true, eventData: data };
   } catch (error) {
     console.error('Error creating calendar event:', error);
-    
-    // Handle token issues
-    if (error.message.includes('token') || error.message.includes('auth')) {
-      console.log('Authentication error detected, clearing token cache');
-      
-      // Clear the token cache
-      await new Promise(resolve => {
-        chrome.identity.clearAllCachedAuthTokens(resolve);
-      });
-      
-      return { 
-        success: false, 
-        error: 'Authentication failed. Please try again and allow access to your calendar.' 
-      };
-    }
-    
     return { success: false, error: error.message };
   }
 }
@@ -1036,7 +711,9 @@ function parseEventTimes(eventDetails) {
       endDateTime: endDateTime.toISOString()
     });
     
+    // Return all original event details along with the parsed time information
     return {
+      ...eventDetails,
       startDateTime: startDateTime.toISOString(),
       endDateTime: endDateTime.toISOString()
     };
@@ -1137,6 +814,7 @@ function getCachedEvent(text) {
           return;
         } else {
           // Cache expired, remove it
+          console.log('Cache expired, removing');
           delete cache[key];
           chrome.storage.local.set({ [EVENT_CACHE_KEY]: cache });
         }
@@ -1147,7 +825,6 @@ function getCachedEvent(text) {
   });
 }
 
-// Check cache for event extraction result
-function checkCache(text) {
-  return getCachedEvent(text);
-}
+// NOTE: All local extraction functions have been removed.
+// The extension now relies solely on the backend API for event extraction.
+

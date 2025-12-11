@@ -244,6 +244,20 @@ Use this to resolve relative dates and times:
 - "tomorrow" = {tomorrow_date}
 - "next week" = {next_week_date}
 
+TITLE CREATION RULES:
+1. Create a SHORT, CONCISE title (3-5 words) that captures the purpose of the meeting
+2. Focus on the meeting TYPE or PURPOSE, not the details of when/where
+3. Use action verbs when appropriate (e.g., "Review", "Discuss", "Plan")
+4. DO NOT include date/time information in the title
+5. DO NOT use quotes in the title
+6. DO NOT copy-paste large portions of the text as the title
+7. Examples of good titles:
+   - "Team Weekly Sync"
+   - "Project Planning Meeting"
+   - "Interview with Candidate"
+   - "Coffee with David"
+   - "Doctor Appointment"
+
 Rules:
 1. Convert any timezone-specific times to Europe/Berlin
 2. If no end time given, set it to 1 hour after start time
@@ -283,8 +297,9 @@ Example of good description for a conversation:
 Only respond by calling the createEvent function.'''
         
         # Get completion from OpenAI with function calling
+        # Using gpt-3.5-turbo for faster response times (~3x faster than gpt-4)
         completion = client.chat.completions.create(
-            model="gpt-4-turbo-preview",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
