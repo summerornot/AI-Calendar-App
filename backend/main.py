@@ -350,10 +350,76 @@ Only respond by calling the createEvent function.'''
             
     except Exception as e:
         print(f"Error processing text: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        # Re-raise to be handled by the endpoint with partial data preservation
+        raise
+
+def create_fallback_response(text: str, current_time: str, error_message: str):
+    """
+    Create a fallback response that preserves any extractable information.
+    Returns partial data with an extraction_error flag for the frontend.
+    """
+    print(f"Creating fallback response for error: {error_message}")
+    
+    # Get current date as fallback
+    try:
+        user_tz = pytz.timezone('Europe/Berlin')
+        user_now = datetime.fromisoformat(current_time.replace('Z', '+00:00')).astimezone(user_tz)
+        default_date = user_now.strftime('%Y-%m-%d')
+    except:
+        default_date = datetime.now().strftime('%Y-%m-%d')
+    
+    # Try to extract a meaningful title from the text
+    title = ""
+    text_lower = text.lower()
+    
+    # Look for common meeting-related keywords to create a title
+    if "meeting" in text_lower:
+        title = "Meeting"
+    elif "call" in text_lower:
+        title = "Call"
+    elif "appointment" in text_lower:
+        title = "Appointment"
+    elif "lunch" in text_lower:
+        title = "Lunch"
+    elif "coffee" in text_lower:
+        title = "Coffee"
+    elif "interview" in text_lower:
+        title = "Interview"
+    elif "review" in text_lower:
+        title = "Review"
+    elif "sync" in text_lower:
+        title = "Sync"
+    elif "discussion" in text_lower:
+        title = "Discussion"
+    
+    # Use first few words as title if nothing found
+    if not title:
+        words = text.split()[:5]
+        title = " ".join(words)
+        if len(title) > 40:
+            title = title[:40] + "..."
+    
+    fallback_response = {
+        "title": title,
+        "date": default_date,
+        "startTime": "12:00 PM",
+        "endTime": "1:00 PM",
+        "location": "",
+        "attendees": [],
+        "description": text,  # Preserve original text as description
+        "extraction_error": "Sorry, the event could not be extracted correctly. Please fill out remaining details manually."
+    }
+    
+    print(f"Fallback response: {fallback_response}")
+    return fallback_response
+
 
 @app.post("/process_event")
 async def process_event(request: Request):
+    text = ''
+    current_time = None
+    partial_event = None  # Store any partial data extracted before failure
+    
     try:
         data = await request.json()
         text = data.get('text', '')
@@ -369,25 +435,14 @@ async def process_event(request: Request):
         
         print(f"Processing text: '{text}', current_time: '{current_time}'")
         return process_text(text, current_time)
+        
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
+        
     except Exception as e:
         print(f"Error in process_event: {str(e)}")
-        # Instead of raising an error, return a mock response
-        try:
-            mock_result = get_mock_response(text, current_time)
-            print(f"Returning mock response due to error: {mock_result}")
-            return mock_result
-        except Exception as mock_error:
-            print(f"Error generating mock response: {str(mock_error)}")
-            # Return a minimal valid response as last resort
-            return {
-                "title": f"Event from text: {text[:30]}...",
-                "description": text,
-                "location": "",
-                "startTime": "3:00 PM",
-                "endTime": "4:00 PM",
-                "startDate": "2025-04-01",
-                "endDate": "2025-04-01"
-            }
+        # Return partial extraction with error flag - preserve any extracted info
+        return create_fallback_response(text, current_time, str(e))
 
 @app.get("/health")
 async def health_check():

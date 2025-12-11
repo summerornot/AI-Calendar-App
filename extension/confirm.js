@@ -158,6 +158,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Hide any existing warning banner first
     warningBanner.style.display = 'none';
     
+    // Check if backend returned an extraction error
+    const hasExtractionError = eventDetails.extraction_error;
+    if (hasExtractionError) {
+      console.warn('Backend returned extraction error:', eventDetails.extraction_error);
+    }
+    
     // Ensure the form screen is visible
     document.getElementById('formScreen').style.display = 'flex';
     
@@ -214,10 +220,9 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       console.log('All form fields expanded and visible');
       
-      // Check if required fields are still missing after filling
-      if (!titleInput.value || !dateInput.value || !startTimeInput.value) {
-        console.warn('Some required fields are missing after fillForm');
-        showWarningBanner('Some event details could not be extracted. Please fill in the missing information.');
+      // Show warning if backend returned extraction error
+      if (hasExtractionError) {
+        showWarningBanner(eventDetails.extraction_error);
       }
     }, 100);
   }
