@@ -303,7 +303,7 @@ Call createEvent with the extracted details.'''
         
         # Add a flag if date was auto-corrected so UI can show a warning
         if date_was_corrected:
-            result['extraction_error'] = f"The extracted date was in the past. Date has been set to tomorrow."
+            result['extraction_error'] = "Date/Time could not be extracted properly. Please select the correct ones manually."
         
         print(f"Validated event details: {result}")
         return result
