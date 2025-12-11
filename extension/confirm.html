@@ -9,10 +9,14 @@
       box-sizing: border-box;
     }
 
-    body {
-      font-family: 'Google Sans', Roboto, Arial, sans-serif;
+    html, body {
+      height: 100%;
       margin: 0;
       padding: 0;
+    }
+
+    body {
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
       color: #3c4043;
       background: #fff;
       font-size: 14px;
@@ -21,10 +25,11 @@
     .container {
       width: 100%;
       max-width: 448px;
+      height: 100%;
       margin: 0 auto;
       background: #fff;
-      border-radius: 8px;
-      overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
     /* Header */
@@ -32,6 +37,7 @@
       display: flex;
       justify-content: flex-end;
       padding: 4px 8px 0 8px;
+      flex-shrink: 0;
     }
 
     .close-button {
@@ -52,7 +58,9 @@
 
     /* Form Content */
     .form-content {
+      flex: 1;
       padding: 0 24px 8px 24px;
+      overflow-y: auto;
     }
 
     /* Title Input */
@@ -219,6 +227,7 @@
       display: flex;
       justify-content: flex-end;
       padding: 16px 24px;
+      flex-shrink: 0;
     }
 
     .save-button {
