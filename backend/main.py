@@ -9,6 +9,7 @@ from pydantic import BaseModel, validator
 from typing import List, Optional
 import re
 from dotenv import load_dotenv
+from langsmith import traceable
 
 # Error codes matching frontend errors.js
 class ErrorCodes:
@@ -227,6 +228,20 @@ def get_mock_response(text: str, current_time: str):
             "description": ""
         }
 
+@traceable(run_type="llm")
+def call_openai_extraction(system_prompt: str, user_text: str):
+    """Call OpenAI API for event extraction with LangSmith tracing."""
+    return client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_text}
+        ],
+        functions=[CREATE_EVENT_FUNCTION],
+        function_call={"name": "createEvent"}
+    )
+
+@traceable(run_type="chain")
 def process_text(text: str, current_time: str, user_timezone: str = 'UTC'):
     try:
         # If no API key or client is invalid, use mock response
@@ -269,16 +284,7 @@ RULES:
 Call createEvent with the extracted details.'''
         
         # Get completion from OpenAI with function calling
-        # Using gpt-3.5-turbo for faster response times (~3x faster than gpt-4)
-        completion = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text}
-            ],
-            functions=[CREATE_EVENT_FUNCTION],
-            function_call={"name": "createEvent"}
-        )
+        completion = call_openai_extraction(system_prompt, text)
         
         # Get the function call
         function_call = completion.choices[0].message.function_call
@@ -327,6 +333,7 @@ Call createEvent with the extracted details.'''
         # Re-raise to be handled by the endpoint with partial data preservation
         raise
 
+@traceable
 def create_fallback_response(text: str, current_time: str, error_message: str, user_timezone: str = 'UTC', error_code: str = None):
     """
     Create a fallback response that preserves any extractable information.
