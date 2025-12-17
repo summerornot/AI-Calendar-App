@@ -604,10 +604,34 @@
   <div class="container">
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loadingOverlay">
-      <!-- Spinner (shown during initial load) -->
-      <div id="spinnerContainer">
-        <div class="loading-spinner"></div>
-        <div class="loading-text">Extracting event details...</div>
+      <!-- Extracting Animation (shown during initial load) -->
+      <div class="completing-container visible" id="extractingContainer">
+        <div class="completing-checklist" id="extractingChecklist">
+          <div class="completing-item" data-item="analyzing">
+            <div class="check-circle">
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <span class="item-text">Analyzing text</span>
+          </div>
+          <div class="completing-item" data-item="extracting">
+            <div class="check-circle">
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <span class="item-text">Extracting event</span>
+          </div>
+          <div class="completing-item" data-item="finalizing">
+            <div class="check-circle">
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <span class="item-text">Finalizing details</span>
+          </div>
+        </div>
       </div>
       
       <!-- Completing Animation (shown when saving) -->

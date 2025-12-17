@@ -27,9 +27,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // State
   let isDatetimeExpanded = false;
+  let extractionAnimationInterval = null;
 
   // Initialize with default values
   setDefaultDateTime();
+  
+  // Start extraction animation immediately
+  startExtractionAnimation();
 
   // Close button handler
   closeButton.addEventListener('click', function() {
@@ -247,13 +251,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Completing Animation Functions
   function showCompletingAnimation() {
-    const spinnerContainer = document.getElementById('spinnerContainer');
+    const extractingContainer = document.getElementById('extractingContainer');
     const completingContainer = document.getElementById('completingContainer');
     const completingChecklist = document.getElementById('completingChecklist');
     const completingSuccess = document.getElementById('completingSuccess');
     
-    // Reset state
-    spinnerContainer.style.display = 'none';
+    // Hide extracting, show completing
+    extractingContainer.classList.remove('visible');
     completingContainer.classList.add('visible');
     completingSuccess.classList.remove('visible');
     
@@ -269,7 +273,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   function animateChecklistItems() {
-    const items = document.querySelectorAll('.completing-item');
+    const items = document.getElementById('completingChecklist').querySelectorAll('.completing-item');
     let delay = 0;
     
     // Animate first 3 items quickly (they're already "done")
@@ -286,8 +290,8 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   function completeAnimation() {
-    const items = document.querySelectorAll('.completing-item');
     const completingChecklist = document.getElementById('completingChecklist');
+    const items = completingChecklist.querySelectorAll('.completing-item');
     const completingSuccess = document.getElementById('completingSuccess');
     
     // Complete the last item (Adding to calendar)
@@ -307,14 +311,63 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   function hideCompletingAnimation() {
-    const spinnerContainer = document.getElementById('spinnerContainer');
+    const extractingContainer = document.getElementById('extractingContainer');
     const completingContainer = document.getElementById('completingContainer');
     const completingChecklist = document.getElementById('completingChecklist');
     
     loadingOverlay.classList.remove('visible');
     completingContainer.classList.remove('visible');
-    spinnerContainer.style.display = 'flex';
+    extractingContainer.classList.add('visible');
     completingChecklist.style.display = 'flex';
+  }
+
+  // Extraction Animation Functions
+  function startExtractionAnimation() {
+    const extractingChecklist = document.getElementById('extractingChecklist');
+    const items = extractingChecklist.querySelectorAll('.completing-item');
+    
+    // Reset all items
+    items.forEach(item => item.classList.remove('completed'));
+    
+    // Show loading overlay
+    loadingOverlay.classList.add('visible');
+    
+    // Animate items with delays to simulate progress
+    // First item: Analyzing text (starts after 300ms)
+    setTimeout(() => {
+      items[0].classList.add('completed');
+    }, 300);
+    
+    // Second item: Extracting event (starts after 800ms)
+    setTimeout(() => {
+      items[1].classList.add('completed');
+    }, 800);
+    
+    // Third item will be completed when data arrives (in completeExtractionAnimation)
+  }
+  
+  function completeExtractionAnimation(callback) {
+    const extractingChecklist = document.getElementById('extractingChecklist');
+    const items = extractingChecklist.querySelectorAll('.completing-item');
+    
+    // Complete the last item
+    items[2].classList.add('completed');
+    
+    // After a brief moment, hide overlay and show form
+    setTimeout(() => {
+      loadingOverlay.classList.remove('visible');
+      if (callback) callback();
+    }, 400);
+  }
+  
+  function hideExtractionAnimation() {
+    const extractingContainer = document.getElementById('extractingContainer');
+    const extractingChecklist = document.getElementById('extractingChecklist');
+    const items = extractingChecklist.querySelectorAll('.completing-item');
+    
+    // Reset for next time
+    items.forEach(item => item.classList.remove('completed'));
+    loadingOverlay.classList.remove('visible');
   }
 
   // Helper Functions
@@ -339,51 +392,56 @@ document.addEventListener('DOMContentLoaded', function() {
   function fillFormWithEventDetails(eventDetails) {
     console.log('Filling form:', eventDetails);
     
-    // Hide warning banner first
-    warningBanner.classList.remove('visible');
+    // Complete the extraction animation, then fill form
+    completeExtractionAnimation(() => {
+      // Hide warning banner first
+      warningBanner.classList.remove('visible');
 
-    // Check for extraction error
-    if (eventDetails.extraction_error) {
-      showWarningBanner(eventDetails.extraction_error);
-    }
+      // Check for extraction error
+      if (eventDetails.extraction_error) {
+        showWarningBanner(eventDetails.extraction_error);
+      }
 
-    // Title
-    if (eventDetails.title) {
-      titleInput.value = eventDetails.title;
-    }
+      // Title
+      if (eventDetails.title) {
+        titleInput.value = eventDetails.title;
+      }
 
-    // Date
-    if (eventDetails.date) {
-      dateInput.value = eventDetails.date;
-    }
+      // Date
+      if (eventDetails.date) {
+        dateInput.value = eventDetails.date;
+      }
 
-    // Times
-    if (eventDetails.startTime) {
-      startTimeInput.value = ensureProperTimeFormat(eventDetails.startTime);
-    }
-    if (eventDetails.endTime) {
-      endTimeInput.value = ensureProperTimeFormat(eventDetails.endTime);
-    }
+      // Times
+      if (eventDetails.startTime) {
+        startTimeInput.value = ensureProperTimeFormat(eventDetails.startTime);
+      }
+      if (eventDetails.endTime) {
+        endTimeInput.value = ensureProperTimeFormat(eventDetails.endTime);
+      }
 
-    // Location
-    if (eventDetails.location) {
-      locationInput.value = eventDetails.location;
-    }
+      // Location
+      if (eventDetails.location) {
+        locationInput.value = eventDetails.location;
+      }
 
-    // Guests
-    if (eventDetails.attendees && eventDetails.attendees.length > 0) {
-      guestsInput.value = eventDetails.attendees.join(', ');
-    }
+      // Guests
+      if (eventDetails.attendees && eventDetails.attendees.length > 0) {
+        guestsInput.value = eventDetails.attendees.join(', ');
+      }
 
-    // Description
-    if (eventDetails.description) {
-      descriptionInput.value = eventDetails.description;
-    }
+      // Description
+      if (eventDetails.description) {
+        descriptionInput.value = eventDetails.description;
+      }
 
-    updateDateTimeDisplay();
+      updateDateTimeDisplay();
+    });
   }
 
   function showManualEntryForm(selectedText) {
+    // Hide extraction animation first
+    hideExtractionAnimation();
     showWarningBanner('AI extraction unavailable. Please enter event details manually.');
     
     setDefaultDateTime();
