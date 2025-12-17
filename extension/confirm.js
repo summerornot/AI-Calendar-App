@@ -203,9 +203,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Hide any previous warning
     warningBanner.classList.remove('visible');
 
-    // Show loading
+    // Show completing animation
     saveButton.disabled = true;
     saveButton.textContent = 'Saving...';
+    showCompletingAnimation();
 
     // Get attendees as array
     const attendees = guestsInput.value
@@ -229,8 +230,11 @@ document.addEventListener('DOMContentLoaded', function() {
       eventDetails: eventDetails
     }, function(response) {
       if (response && response.success) {
-        showSuccessScreen();
+        // Complete the animation and show success
+        completeAnimation();
       } else {
+        // Hide animation and show error
+        hideCompletingAnimation();
         saveButton.disabled = false;
         saveButton.textContent = 'Save';
         
@@ -240,6 +244,78 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   });
+
+  // Completing Animation Functions
+  function showCompletingAnimation() {
+    const spinnerContainer = document.getElementById('spinnerContainer');
+    const completingContainer = document.getElementById('completingContainer');
+    const completingChecklist = document.getElementById('completingChecklist');
+    const completingSuccess = document.getElementById('completingSuccess');
+    
+    // Reset state
+    spinnerContainer.style.display = 'none';
+    completingContainer.classList.add('visible');
+    completingSuccess.classList.remove('visible');
+    
+    // Reset all items
+    const items = completingChecklist.querySelectorAll('.completing-item');
+    items.forEach(item => item.classList.remove('completed'));
+    
+    // Show overlay
+    loadingOverlay.classList.add('visible');
+    
+    // Animate items one by one
+    animateChecklistItems();
+  }
+  
+  function animateChecklistItems() {
+    const items = document.querySelectorAll('.completing-item');
+    let delay = 0;
+    
+    // Animate first 3 items quickly (they're already "done")
+    items.forEach((item, index) => {
+      if (index < 3) {
+        setTimeout(() => {
+          item.classList.add('completed');
+        }, delay);
+        delay += 200; // 200ms between each
+      }
+    });
+    
+    // The 4th item (Adding to calendar) will be completed when API responds
+  }
+  
+  function completeAnimation() {
+    const items = document.querySelectorAll('.completing-item');
+    const completingChecklist = document.getElementById('completingChecklist');
+    const completingSuccess = document.getElementById('completingSuccess');
+    
+    // Complete the last item (Adding to calendar)
+    const lastItem = items[items.length - 1];
+    lastItem.classList.add('completed');
+    
+    // After a short delay, show success
+    setTimeout(() => {
+      completingChecklist.style.display = 'none';
+      completingSuccess.classList.add('visible');
+      
+      // Auto-close after showing success
+      setTimeout(() => {
+        window.parent.postMessage({ action: 'closeModal' }, '*');
+      }, 1500);
+    }, 500);
+  }
+  
+  function hideCompletingAnimation() {
+    const spinnerContainer = document.getElementById('spinnerContainer');
+    const completingContainer = document.getElementById('completingContainer');
+    const completingChecklist = document.getElementById('completingChecklist');
+    
+    loadingOverlay.classList.remove('visible');
+    completingContainer.classList.remove('visible');
+    spinnerContainer.style.display = 'flex';
+    completingChecklist.style.display = 'flex';
+  }
 
   // Helper Functions
 

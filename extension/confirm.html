@@ -271,7 +271,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.95);
       z-index: 100;
       justify-content: center;
       align-items: center;
@@ -299,6 +299,134 @@
       margin-top: 16px;
       color: #5f6368;
       font-size: 14px;
+    }
+
+    /* Completing Animation */
+    .completing-container {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 20px;
+    }
+
+    .completing-container.visible {
+      display: flex;
+    }
+
+    .completing-checklist {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 200px;
+    }
+
+    .completing-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      opacity: 0.4;
+      transform: translateX(-10px);
+      transition: all 0.3s ease;
+    }
+
+    .completing-item.completed {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    .completing-item .check-circle {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid #dadce0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      flex-shrink: 0;
+    }
+
+    .completing-item.completed .check-circle {
+      background: #34a853;
+      border-color: #34a853;
+    }
+
+    .completing-item .check-circle svg {
+      width: 14px;
+      height: 14px;
+      opacity: 0;
+      transform: scale(0);
+      transition: all 0.2s ease;
+    }
+
+    .completing-item.completed .check-circle svg {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .completing-item .item-text {
+      font-size: 14px;
+      color: #5f6368;
+      transition: color 0.3s ease;
+    }
+
+    .completing-item.completed .item-text {
+      color: #202124;
+    }
+
+    .completing-success {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      animation: fadeInUp 0.4s ease;
+    }
+
+    .completing-success.visible {
+      display: flex;
+    }
+
+    .success-circle {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: #34a853;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: scaleIn 0.3s ease;
+    }
+
+    .success-circle svg {
+      width: 28px;
+      height: 28px;
+    }
+
+    .success-text {
+      font-size: 16px;
+      font-weight: 500;
+      color: #202124;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes scaleIn {
+      from {
+        transform: scale(0);
+      }
+      to {
+        transform: scale(1);
+      }
     }
 
     /* Date Picker */
@@ -476,8 +604,58 @@
   <div class="container">
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loadingOverlay">
-      <div class="loading-spinner"></div>
-      <div class="loading-text">Extracting event details...</div>
+      <!-- Spinner (shown during initial load) -->
+      <div id="spinnerContainer">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Extracting event details...</div>
+      </div>
+      
+      <!-- Completing Animation (shown when saving) -->
+      <div class="completing-container" id="completingContainer">
+        <div class="completing-checklist" id="completingChecklist">
+          <div class="completing-item" data-item="title">
+            <div class="check-circle">
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <span class="item-text">Event title</span>
+          </div>
+          <div class="completing-item" data-item="datetime">
+            <div class="check-circle">
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <span class="item-text">Date & time</span>
+          </div>
+          <div class="completing-item" data-item="details">
+            <div class="check-circle">
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <span class="item-text">Event details</span>
+          </div>
+          <div class="completing-item" data-item="calendar">
+            <div class="check-circle">
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <span class="item-text">Adding to calendar</span>
+          </div>
+        </div>
+        
+        <div class="completing-success" id="completingSuccess">
+          <div class="success-circle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+          <div class="success-text">Event added!</div>
+        </div>
+      </div>
     </div>
 
     <!-- Form Screen -->
