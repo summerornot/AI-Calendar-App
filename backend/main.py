@@ -10,6 +10,19 @@ from typing import List, Optional
 import re
 from dotenv import load_dotenv
 
+# Error codes matching frontend errors.js
+class ErrorCodes:
+    BACKEND_TIMEOUT = 'BACKEND_TIMEOUT'
+    BACKEND_ERROR = 'BACKEND_ERROR'
+    RATE_LIMITED = 'RATE_LIMITED'
+    NO_EVENT_FOUND = 'NO_EVENT_FOUND'
+    PAST_DATE = 'PAST_DATE'
+    MISSING_TIME = 'MISSING_TIME'
+    EXTRACTION_INCOMPLETE = 'EXTRACTION_INCOMPLETE'
+    TEXT_TOO_SHORT = 'TEXT_TOO_SHORT'
+    TEXT_TOO_LONG = 'TEXT_TOO_LONG'
+    UNKNOWN_ERROR = 'UNKNOWN_ERROR'
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -303,6 +316,7 @@ Call createEvent with the extracted details.'''
         
         # Add a flag if date was auto-corrected so UI can show a warning
         if date_was_corrected:
+            result['error_code'] = ErrorCodes.PAST_DATE
             result['extraction_error'] = "Date/Time could not be extracted properly. Please select the correct ones manually."
         
         print(f"Validated event details: {result}")
@@ -313,12 +327,12 @@ Call createEvent with the extracted details.'''
         # Re-raise to be handled by the endpoint with partial data preservation
         raise
 
-def create_fallback_response(text: str, current_time: str, error_message: str, user_timezone: str = 'UTC'):
+def create_fallback_response(text: str, current_time: str, error_message: str, user_timezone: str = 'UTC', error_code: str = None):
     """
     Create a fallback response that preserves any extractable information.
     Returns partial data with an extraction_error flag for the frontend.
     """
-    print(f"Creating fallback response for error: {error_message}")
+    print(f"Creating fallback response for error: {error_message}, code: {error_code}")
     
     # Get current date as fallback using user's timezone
     try:
@@ -370,6 +384,18 @@ def create_fallback_response(text: str, current_time: str, error_message: str, u
     else:
         brief_description = text.strip()
     
+    # Determine error code if not provided
+    if not error_code:
+        error_lower = error_message.lower()
+        if 'timeout' in error_lower:
+            error_code = ErrorCodes.BACKEND_TIMEOUT
+        elif 'rate limit' in error_lower or '429' in error_lower:
+            error_code = ErrorCodes.RATE_LIMITED
+        elif 'no event' in error_lower or 'could not extract' in error_lower:
+            error_code = ErrorCodes.NO_EVENT_FOUND
+        else:
+            error_code = ErrorCodes.EXTRACTION_INCOMPLETE
+    
     fallback_response = {
         "title": title,
         "date": default_date,
@@ -378,6 +404,7 @@ def create_fallback_response(text: str, current_time: str, error_message: str, u
         "location": "",
         "attendees": [],
         "description": brief_description,
+        "error_code": error_code,
         "extraction_error": "Could not fully extract event details. Please verify and adjust as needed."
     }
     
@@ -397,15 +424,33 @@ async def process_event(request: Request):
         current_time = data.get('current_time')  # ISO string from frontend
         user_timezone = data.get('user_timezone', 'UTC')  # User's timezone from browser
         
-        if not text:
+        # Validate text length
+        if not text or len(text.strip()) == 0:
             print("Error: No text provided")
-            raise HTTPException(status_code=400, detail="No text provided")
+            return {
+                "error_code": ErrorCodes.TEXT_TOO_SHORT,
+                "extraction_error": "No text provided. Please select some text containing event details."
+            }
+        
+        if len(text.strip()) < 10:
+            print(f"Error: Text too short ({len(text.strip())} chars)")
+            return {
+                "error_code": ErrorCodes.TEXT_TOO_SHORT,
+                "extraction_error": "Please select more text that includes event details like date, time, and description."
+            }
+        
+        if len(text) > 5000:
+            print(f"Error: Text too long ({len(text)} chars)")
+            return {
+                "error_code": ErrorCodes.TEXT_TOO_LONG,
+                "extraction_error": "Please select a shorter portion of text containing just the event details."
+            }
             
         if not current_time:
             print("Error: No current time provided")
-            raise HTTPException(status_code=400, detail="No current time provided")
+            current_time = datetime.now().isoformat()  # Use server time as fallback
         
-        print(f"Processing text: '{text}', current_time: '{current_time}', timezone: '{user_timezone}'")
+        print(f"Processing text: '{text[:100]}...', current_time: '{current_time}', timezone: '{user_timezone}'")
         return process_text(text, current_time, user_timezone)
         
     except HTTPException:
@@ -413,8 +458,17 @@ async def process_event(request: Request):
         
     except Exception as e:
         print(f"Error in process_event: {str(e)}")
+        error_str = str(e).lower()
+        
+        # Determine specific error code
+        error_code = ErrorCodes.UNKNOWN_ERROR
+        if 'timeout' in error_str or 'timed out' in error_str:
+            error_code = ErrorCodes.BACKEND_TIMEOUT
+        elif 'rate limit' in error_str or '429' in error_str:
+            error_code = ErrorCodes.RATE_LIMITED
+        
         # Return partial extraction with error flag - preserve any extracted info
-        return create_fallback_response(text, current_time, str(e), user_timezone)
+        return create_fallback_response(text, current_time, str(e), user_timezone, error_code)
 
 @app.get("/health")
 async def health_check():

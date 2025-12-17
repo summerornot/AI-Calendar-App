@@ -84,14 +84,124 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
+  // Form validation error messages
+  const VALIDATION_ERRORS = {
+    EMPTY_TITLE: {
+      message: 'Please enter a title for your event.',
+      field: 'title'
+    },
+    INVALID_DATE: {
+      message: 'Please select a valid date.',
+      field: 'date'
+    },
+    INVALID_TIME: {
+      message: 'Please select valid start and end times.',
+      field: 'time'
+    },
+    END_BEFORE_START: {
+      message: 'End time must be after start time.',
+      field: 'time'
+    },
+    INVALID_EMAIL: {
+      message: 'Please enter valid email addresses for guests.',
+      field: 'guests'
+    }
+  };
+
+  // Validate form and return error code or null if valid
+  function validateForm() {
+    // Check title
+    if (!titleInput.value.trim()) {
+      return 'EMPTY_TITLE';
+    }
+
+    // Check date
+    if (!dateInput.value || !/^\d{4}-\d{2}-\d{2}$/.test(dateInput.value)) {
+      return 'INVALID_DATE';
+    }
+
+    // Check times
+    const timeRegex = /^(1[0-2]|0?[1-9]):([0-5][0-9])\s*(AM|PM)$/i;
+    if (!timeRegex.test(startTimeInput.value) || !timeRegex.test(endTimeInput.value)) {
+      return 'INVALID_TIME';
+    }
+
+    // Check end time is after start time (on same day)
+    const startParts = parseTime(startTimeInput.value);
+    const endParts = parseTime(endTimeInput.value);
+    if (startParts && endParts) {
+      const startMinutes = startParts.hours * 60 + startParts.minutes;
+      const endMinutes = endParts.hours * 60 + endParts.minutes;
+      if (endMinutes <= startMinutes) {
+        return 'END_BEFORE_START';
+      }
+    }
+
+    // Check email format for guests (if any)
+    if (guestsInput.value.trim()) {
+      const emails = guestsInput.value.split(',').map(e => e.trim()).filter(e => e);
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      for (const email of emails) {
+        if (!emailRegex.test(email)) {
+          return 'INVALID_EMAIL';
+        }
+      }
+    }
+
+    return null; // Valid
+  }
+
+  // Parse time string to hours/minutes in 24h format
+  function parseTime(timeStr) {
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) return null;
+    
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const period = match[3].toUpperCase();
+    
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    
+    return { hours, minutes };
+  }
+
+  // Show validation error
+  function showValidationError(errorCode) {
+    const error = VALIDATION_ERRORS[errorCode];
+    if (!error) return;
+    
+    // Show error in warning banner
+    showWarningBanner(error.message);
+    
+    // Focus the relevant field
+    switch (error.field) {
+      case 'title':
+        titleInput.focus();
+        break;
+      case 'date':
+        datePill.click();
+        break;
+      case 'time':
+        startTimePill.click();
+        break;
+      case 'guests':
+        guestsInput.focus();
+        break;
+    }
+  }
+
   // Save button handler
   saveButton.addEventListener('click', function() {
-    // Validate
-    if (!titleInput.value.trim()) {
-      alert('Please enter a title for the event');
-      titleInput.focus();
+    // Validate form
+    const validationError = validateForm();
+    if (validationError) {
+      showValidationError(validationError);
       return;
     }
+
+    // Hide any previous warning
+    warningBanner.classList.remove('visible');
 
     // Show loading
     saveButton.disabled = true;
@@ -123,7 +233,10 @@ document.addEventListener('DOMContentLoaded', function() {
       } else {
         saveButton.disabled = false;
         saveButton.textContent = 'Save';
-        alert('Failed to create event: ' + (response ? response.error : 'Unknown error'));
+        
+        // Show user-friendly error message
+        const errorMessage = response?.error || 'Failed to save event. Please try again.';
+        showWarningBanner(errorMessage);
       }
     });
   });

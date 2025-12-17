@@ -94,7 +94,7 @@ function createModal(state = 'loading') {
 
   const errorIcon = document.createElement('div');
   errorIcon.innerHTML = `
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm-1-5h2v2h-2v-2zm0-8h2v6h-2V7z" fill="#EA4335"/>
     </svg>
   `;
@@ -102,14 +102,25 @@ function createModal(state = 'loading') {
     margin-bottom: 16px;
   `;
 
-  const errorMessage = document.createElement('div');
-  errorMessage.id = 'ai-calendar-error-message';
-  errorMessage.textContent = 'Failed to process event. Please try again.';
-  errorMessage.style.cssText = `
-    color: #5f6368;
-    font-size: 16px;
+  const errorTitle = document.createElement('div');
+  errorTitle.id = 'ai-calendar-error-title';
+  errorTitle.textContent = 'Something went wrong';
+  errorTitle.style.cssText = `
+    color: #202124;
+    font-size: 18px;
     font-weight: 500;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
+  `;
+
+  const errorHint = document.createElement('div');
+  errorHint.id = 'ai-calendar-error-hint';
+  errorHint.textContent = 'An unexpected error occurred. Please try again.';
+  errorHint.style.cssText = `
+    color: #5f6368;
+    font-size: 14px;
+    margin-bottom: 20px;
+    max-width: 300px;
+    line-height: 1.4;
   `;
 
   const errorButtonContainer = document.createElement('div');
@@ -166,7 +177,8 @@ function createModal(state = 'loading') {
   loadingSpinner.appendChild(loadingText);
 
   errorContainer.appendChild(errorIcon);
-  errorContainer.appendChild(errorMessage);
+  errorContainer.appendChild(errorTitle);
+  errorContainer.appendChild(errorHint);
   errorContainer.appendChild(errorButtonContainer);
 
   modalContent.appendChild(loadingSpinner);
@@ -197,6 +209,90 @@ function createModal(state = 'loading') {
   return modal;
 }
 
+// Error messages mapping (matches backend error codes)
+const ERROR_MESSAGES = {
+  'BACKEND_TIMEOUT': {
+    title: 'Taking too long',
+    hint: 'The server is slow to respond. Please try again in a moment.',
+    recoverable: true
+  },
+  'BACKEND_UNREACHABLE': {
+    title: "Couldn't connect",
+    hint: 'Unable to reach the server. Check your internet connection and try again.',
+    recoverable: true
+  },
+  'BACKEND_ERROR': {
+    title: 'Something went wrong',
+    hint: 'Our server encountered an error. Please try again.',
+    recoverable: true
+  },
+  'RATE_LIMITED': {
+    title: 'Too many requests',
+    hint: "You've made too many requests. Please wait a minute and try again.",
+    recoverable: true
+  },
+  'NO_EVENT_FOUND': {
+    title: 'No event detected',
+    hint: "We couldn't find any event details in the selected text. Try selecting text with a date and time.",
+    recoverable: false
+  },
+  'PAST_DATE': {
+    title: 'Date needs attention',
+    hint: 'The extracted date appears to be in the past. Please select the correct date manually.',
+    recoverable: false
+  },
+  'MISSING_TIME': {
+    title: 'Time not found',
+    hint: "We couldn't find a time in the text. Please enter the start and end time manually.",
+    recoverable: false
+  },
+  'EXTRACTION_INCOMPLETE': {
+    title: 'Extraction incomplete',
+    hint: "Some details couldn't be extracted properly. Please review and complete the form.",
+    recoverable: false
+  },
+  'TEXT_TOO_SHORT': {
+    title: 'Not enough text',
+    hint: 'Please select more text that includes event details like date, time, and description.',
+    recoverable: false
+  },
+  'TEXT_TOO_LONG': {
+    title: 'Too much text',
+    hint: 'Please select a shorter portion of text containing just the event details.',
+    recoverable: false
+  },
+  'NOT_SIGNED_IN': {
+    title: 'Sign in required',
+    hint: 'Please sign in to your Google account to add events to your calendar.',
+    recoverable: true
+  },
+  'AUTH_EXPIRED': {
+    title: 'Session expired',
+    hint: 'Your session has expired. Please sign in again.',
+    recoverable: true
+  },
+  'PERMISSION_DENIED': {
+    title: 'Calendar access needed',
+    hint: 'Please grant calendar permissions to add events. Click the extension icon to authorize.',
+    recoverable: true
+  },
+  'CALENDAR_API_ERROR': {
+    title: "Couldn't save event",
+    hint: 'There was a problem saving to Google Calendar. Please try again.',
+    recoverable: true
+  },
+  'UNKNOWN_ERROR': {
+    title: 'Something went wrong',
+    hint: 'An unexpected error occurred. Please try again.',
+    recoverable: true
+  }
+};
+
+// Get error message by code
+function getErrorMessage(errorCode) {
+  return ERROR_MESSAGES[errorCode] || ERROR_MESSAGES['UNKNOWN_ERROR'];
+}
+
 // Update the modal state
 function updateModal(state, data = {}) {
   console.log('Updating modal state to:', state, data);
@@ -211,7 +307,8 @@ function updateModal(state, data = {}) {
   const loadingSpinner = document.getElementById('ai-calendar-loading');
   const errorContainer = document.getElementById('ai-calendar-error');
   const iframe = document.getElementById('ai-calendar-iframe');
-  const errorMessage = document.getElementById('ai-calendar-error-message');
+  const errorTitle = document.getElementById('ai-calendar-error-title');
+  const errorHint = document.getElementById('ai-calendar-error-hint');
 
   // Reset all elements
   loadingSpinner.style.display = 'none';
@@ -225,8 +322,18 @@ function updateModal(state, data = {}) {
       break;
     case 'error':
       errorContainer.style.display = 'flex';
-      if (data.error) {
-        errorMessage.textContent = data.error;
+      
+      // Get error message from code or use provided error
+      const errorCode = data.errorCode || data.error_code;
+      const errorInfo = errorCode ? getErrorMessage(errorCode) : null;
+      
+      if (errorInfo) {
+        errorTitle.textContent = errorInfo.title;
+        errorHint.textContent = errorInfo.hint;
+      } else if (data.error) {
+        // Fallback to generic error with provided message
+        errorTitle.textContent = 'Something went wrong';
+        errorHint.textContent = data.error;
       }
       
       // Show manual entry button if allowed

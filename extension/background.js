@@ -284,6 +284,21 @@ async function processSelectedText(selectedText, tab) {
         // Store the raw text for reference
         eventDetails.rawText = selectedText;
         
+        // Check if backend returned an error (but still with partial data)
+        if (eventDetails.error_code && !eventDetails.title) {
+          // Backend returned error without usable data
+          console.log('Backend returned error:', eventDetails.error_code, eventDetails.extraction_error);
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'updateModal',
+            state: 'error',
+            errorCode: eventDetails.error_code,
+            error: eventDetails.extraction_error || 'Could not extract event details.',
+            allowManualEntry: true,
+            selectedText: selectedText
+          });
+          return;
+        }
+        
         // Normalize the event data from backend response
         const normalizedEvent = {
           title: eventDetails.title || 'Untitled Event',
@@ -293,7 +308,10 @@ async function processSelectedText(selectedText, tab) {
           location: eventDetails.location || '',
           description: eventDetails.description || '',
           attendees: eventDetails.attendees || [],
-          rawText: selectedText
+          rawText: selectedText,
+          // Pass through error info if present (for warnings like PAST_DATE)
+          error_code: eventDetails.error_code || null,
+          extraction_error: eventDetails.extraction_error || null
         };
         
         console.log('Normalized event data from backend:', normalizedEvent);
@@ -317,22 +335,29 @@ async function processSelectedText(selectedText, tab) {
         // Backend failed - show explicit error, do NOT fall back to local extraction
         console.error('Backend API error:', backendError);
         
+        let errorCode = 'BACKEND_ERROR';
         let errorMessage = 'AI backend is unavailable. Please try again later.';
         
         if (backendError.name === 'AbortError') {
+          errorCode = 'BACKEND_TIMEOUT';
           errorMessage = 'Request timed out. The AI backend is taking too long to respond. Please try again.';
         } else if (backendError.message.includes('Failed to fetch') || backendError.message.includes('NetworkError')) {
+          errorCode = 'BACKEND_UNREACHABLE';
           errorMessage = 'Unable to connect to the AI backend. Please check your internet connection and try again.';
+        } else if (backendError.message.includes('429') || backendError.message.includes('rate limit')) {
+          errorCode = 'RATE_LIMITED';
+          errorMessage = 'Too many requests. Please wait a moment and try again.';
         } else if (backendError.message.includes('Server returned')) {
           errorMessage = `AI backend error: ${backendError.message}`;
         }
         
-        console.log('Showing error state to user:', errorMessage);
+        console.log('Showing error state to user:', errorCode, errorMessage);
         
         // Update modal to show error state with option for manual entry
         chrome.tabs.sendMessage(tab.id, {
           action: 'updateModal',
           state: 'error',
+          errorCode: errorCode,
           error: errorMessage,
           allowManualEntry: true,
           selectedText: selectedText

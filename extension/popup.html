@@ -50,44 +50,68 @@
       font-size: 14px;
       font-style: italic;
     }
+    .debug-info {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #888;
+      text-align: left;
+      border-top: 1px solid #eee;
+      padding-top: 10px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div id="status" class="status">Select text and right-click to add to calendar</div>
     <div id="auth-status" class="auth-status">Checking authentication status...</div>
-    <button id="auth-button" class="button" style="display: none;">Connect to Google Calendar</button>
+    <button id="auth-button" class="button">Connect to Google Calendar</button>
     <div id="details" class="details"></div>
+    <div id="debug-info" class="debug-info"></div>
   </div>
 
   <script>
+    // Debug function to log info to the popup
+    function debugLog(message) {
+      const debugDiv = document.getElementById('debug-info');
+      debugDiv.innerHTML += message + '<br>';
+      console.log(message);
+    }
+
     // Check authentication status on popup open
     function checkAuthStatus() {
+      debugLog('Checking auth status...');
       chrome.runtime.sendMessage({action: 'checkAuthStatus'}, function(response) {
         const authStatusDiv = document.getElementById('auth-status');
         const authButton = document.getElementById('auth-button');
+        
+        debugLog('Auth status response: ' + JSON.stringify(response));
         
         if (response && response.isAuthenticated) {
           authStatusDiv.textContent = 'Connected to Google Calendar';
           authStatusDiv.style.color = '#1e8e3e';
           authButton.style.display = 'none';
+          debugLog('User is authenticated, hiding button');
         } else {
           authStatusDiv.textContent = 'Not connected to Google Calendar';
           authStatusDiv.style.color = '#EA4335';
           authButton.style.display = 'block';
+          debugLog('User is not authenticated, showing button');
         }
       });
     }
     
     // Initialize authentication
     document.getElementById('auth-button').addEventListener('click', function() {
+      debugLog('Auth button clicked, sending authenticate message');
       chrome.runtime.sendMessage({action: 'authenticate'}, function(response) {
+        debugLog('Auth response: ' + JSON.stringify(response));
         if (response && response.success) {
           checkAuthStatus();
         } else {
           const authStatusDiv = document.getElementById('auth-status');
           authStatusDiv.textContent = 'Authentication failed. Please try again.';
           authStatusDiv.style.color = '#EA4335';
+          debugLog('Authentication failed: ' + (response ? response.error : 'Unknown error'));
         }
       });
     });
@@ -99,32 +123,30 @@
       
       if (result.lastEvent) {
         const event = result.lastEvent;
-        
-        if (event.status === 'success') {
+        if (event.success) {
+          statusDiv.textContent = 'Event created successfully!';
           statusDiv.className = 'status success';
-          statusDiv.textContent = '✓ Event Added Successfully';
           
-          const details = [
-            `Title: ${event.title}`,
-            `Date: ${event.date}`,
-            `Time: ${event.time}`
-          ];
+          // Format event details
+          let details = `${event.title}<br>`;
+          details += `Date: ${event.date}<br>`;
+          if (event.startTime) details += `Time: ${event.startTime}`;
+          if (event.endTime) details += ` - ${event.endTime}`;
           
-          if (event.location) {
-            details.push(`Location: ${event.location}`);
-          }
-          
-          detailsDiv.textContent = details.join('\n');
+          detailsDiv.innerHTML = details;
         } else {
+          statusDiv.textContent = 'Failed to create event';
           statusDiv.className = 'status error';
-          statusDiv.textContent = '❌ Failed to Add Event';
-          detailsDiv.textContent = event.message || 'Please try again';
+          detailsDiv.textContent = event.error || 'Unknown error occurred';
         }
       }
     });
     
-    // Check auth status when popup opens
-    checkAuthStatus();
+    // Run auth check when popup opens
+    document.addEventListener('DOMContentLoaded', function() {
+      debugLog('Popup opened, DOM loaded');
+      checkAuthStatus();
+    });
   </script>
 </body>
 </html>

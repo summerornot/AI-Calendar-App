@@ -1,4 +1,5 @@
-fastapi==0.104.1
-uvicorn==0.24.0
-openai==1.3.5
-python-dotenv==1.0.0
+fastapi==0.109.2
+uvicorn==0.27.1
+openai==1.12.0
+python-dotenv==1.0.1
+pytz==2024.1

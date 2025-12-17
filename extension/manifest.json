@@ -17,13 +17,12 @@
     "https://www.googleapis.com/calendar/v3/*"
   ],
   "oauth2": {
-    "client_id": "905368676199-iajk0fec1cq46575h7i62idnjj9j3pe7.apps.googleusercontent.com",
+    "client_id": "905368676199-t6chres56dm34q38bdc4bua25qnpbe18.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/calendar",
       "https://www.googleapis.com/auth/calendar.events"
     ]
   },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiDWnPqIHR3U9nGXEcQ/JX5vc+ozFUKoXNTUJ7QEf6Pc/PiVOGTU8GBDT0z0BbRW5+SXF79EgYCdcH6AR8/xFI6MMiJ5tC7lNkyhKkK9eV9nFR1I4+QFTwTjKK3GIcWZB5fGGAuJXEVBBIoXvW3qwXKAOKgkTL5f0xO8QOHvSGHnkgEUOLwAcyhLHAkXzlY0OZXTbCZbDGUuUdSHKZNXNfXY4ZCr9lTmMgjR5WXrQupQvjGQGLvl8G5fYT4r3KXbECGEKt3lUX1XPxGwcCEAwy3ZnVIlIYHQcQgqxkzUwRWYBvY/xX5YxxIrPJIIZlvdvF5NJ/3h+FTpH0FlBwwIDAQAB",
   "background": {
     "service_worker": "background.js"
   },
