@@ -573,29 +573,46 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Create calendar event
 async function createCalendarEvent(eventDetails) {
+  const startTime = Date.now();
   console.log('Creating calendar event with details:', eventDetails);
   try {
     // Get OAuth token with more detailed error logging
     console.log('Getting OAuth token...');
     
-    // Use a direct approach to get the token
-    const token = await new Promise((resolve, reject) => {
-      chrome.identity.getAuthToken({ interactive: true }, (token) => {
-        if (chrome.runtime.lastError) {
-          console.error('OAuth error:', chrome.runtime.lastError);
-          console.error('Error details:', JSON.stringify(chrome.runtime.lastError));
-          reject(new Error(`Authentication failed: ${chrome.runtime.lastError.message}`));
-        } else if (!token) {
-          console.error('No token received');
-          reject(new Error('Failed to get authentication token'));
+    // First try non-interactive (faster if already authenticated)
+    let token = await new Promise((resolve) => {
+      chrome.identity.getAuthToken({ interactive: false }, (token) => {
+        if (chrome.runtime.lastError || !token) {
+          console.log('Non-interactive auth failed, will try interactive');
+          resolve(null);
         } else {
-          console.log('Successfully obtained token');
-          // Store authentication status
-          chrome.storage.local.set({ 'isAuthenticated': true });
           resolve(token);
         }
       });
     });
+    
+    console.log(`Non-interactive auth took ${Date.now() - startTime}ms`);
+    
+    // If non-interactive failed, try interactive
+    if (!token) {
+      const interactiveStart = Date.now();
+      token = await new Promise((resolve, reject) => {
+        chrome.identity.getAuthToken({ interactive: true }, (token) => {
+          if (chrome.runtime.lastError) {
+            console.error('OAuth error:', chrome.runtime.lastError);
+            reject(new Error(`Authentication failed: ${chrome.runtime.lastError.message}`));
+          } else if (!token) {
+            reject(new Error('Failed to get authentication token'));
+          } else {
+            resolve(token);
+          }
+        });
+      });
+      console.log(`Interactive auth took ${Date.now() - interactiveStart}ms`);
+    }
+    
+    console.log(`Total auth time: ${Date.now() - startTime}ms`);
+    chrome.storage.local.set({ 'isAuthenticated': true });
     
     // Parse event times into ISO format
     const parsedEvent = parseEventTimes(eventDetails);
@@ -634,6 +651,7 @@ async function createCalendarEvent(eventDetails) {
     console.log('Sending event data to Google Calendar:', JSON.stringify(event, null, 2));
     
     // Make the API request to create the event
+    const apiStart = Date.now();
     const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
       method: 'POST',
       headers: {
@@ -642,6 +660,7 @@ async function createCalendarEvent(eventDetails) {
       },
       body: JSON.stringify(event)
     });
+    console.log(`Google Calendar API call took ${Date.now() - apiStart}ms`);
     
     // Check if the request was successful
     if (!response.ok) {
@@ -652,7 +671,7 @@ async function createCalendarEvent(eventDetails) {
     
     // Parse and return the response
     const data = await response.json();
-    console.log('Event created successfully:', data);
+    console.log(`Event created successfully. Total time: ${Date.now() - startTime}ms`);
     return { success: true, eventData: data };
   } catch (error) {
     console.error('Error creating calendar event:', error);
