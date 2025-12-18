@@ -13,6 +13,7 @@ const CONFIG = {
   CONTEXT_MENU_ID: 'addToCalendar',
   CONTEXT_MENU_TITLE: 'Add to Calendar',
   BACKEND_URL: 'https://ai-calendar-app.onrender.com/process_event',
+  LOG_SAVE_URL: 'https://ai-calendar-app.onrender.com/log_calendar_save',
   CALENDAR_API_URL: 'https://www.googleapis.com/calendar/v3/calendars/primary/events',
   REQUEST_TIMEOUT: 15000,
   KEEP_ALIVE_INTERVAL: 60000,
@@ -321,6 +322,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // =============================================================================
 
 async function createCalendarEvent(eventDetails) {
+  const saveStartTime = Date.now();
   const token = await getAuthToken();
   const parsedEvent = parseEventTimes(eventDetails);
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -348,12 +350,54 @@ async function createCalendarEvent(eventDetails) {
     body: JSON.stringify(event)
   });
   
+  const saveDuration = Date.now() - saveStartTime;
+  
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.error?.message || 'Failed to create event');
+    const errorMsg = error.error?.message || 'Failed to create event';
+    
+    // Log failed save to backend
+    logCalendarSave({
+      success: false,
+      event_title: eventDetails.title || 'Untitled Event',
+      event_date: eventDetails.date,
+      event_start_time: eventDetails.startTime,
+      event_end_time: eventDetails.endTime,
+      error: errorMsg,
+      save_duration_ms: saveDuration
+    });
+    
+    throw new Error(errorMsg);
   }
   
-  return { success: true, eventData: await response.json() };
+  const eventData = await response.json();
+  
+  // Log successful save to backend
+  logCalendarSave({
+    success: true,
+    event_id: eventData.id,
+    event_title: eventDetails.title || 'Untitled Event',
+    event_date: eventDetails.date,
+    event_start_time: eventDetails.startTime,
+    event_end_time: eventDetails.endTime,
+    save_duration_ms: saveDuration
+  });
+  
+  return { success: true, eventData };
+}
+
+// Log calendar save result to backend for LangSmith tracing
+async function logCalendarSave(data) {
+  try {
+    await fetch(CONFIG.LOG_SAVE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  } catch (e) {
+    // Silent fail - don't break the main flow
+    console.error('Failed to log calendar save:', e);
+  }
 }
 
 // =============================================================================

@@ -477,6 +477,40 @@ async def process_event(request: Request):
         # Return partial extraction with error flag - preserve any extracted info
         return create_fallback_response(text, current_time, str(e), user_timezone, error_code)
 
+class CalendarSaveResult(BaseModel):
+    success: bool
+    event_id: Optional[str] = None
+    event_title: str
+    event_date: str
+    event_start_time: str
+    event_end_time: str
+    error: Optional[str] = None
+    extraction_duration_ms: Optional[int] = None
+    save_duration_ms: Optional[int] = None
+
+@traceable(run_type="chain", name="calendar_save_result")
+def log_calendar_save(result: CalendarSaveResult):
+    """Log calendar save result for end-to-end tracing."""
+    return {
+        "success": result.success,
+        "event_id": result.event_id,
+        "event_title": result.event_title,
+        "event_date": result.event_date,
+        "event_time": f"{result.event_start_time} - {result.event_end_time}",
+        "error": result.error,
+        "extraction_duration_ms": result.extraction_duration_ms,
+        "save_duration_ms": result.save_duration_ms
+    }
+
+@app.post("/log_calendar_save")
+async def log_calendar_save_endpoint(result: CalendarSaveResult):
+    """Endpoint to log calendar save results for end-to-end tracing."""
+    try:
+        logged = log_calendar_save(result)
+        return {"status": "logged", "data": logged}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
