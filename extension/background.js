@@ -15,7 +15,7 @@ const CONFIG = {
   BACKEND_URL: 'https://ai-calendar-app.onrender.com/process_event',
   LOG_SAVE_URL: 'https://ai-calendar-app.onrender.com/log_calendar_save',
   CALENDAR_API_URL: 'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-  REQUEST_TIMEOUT: 15000,
+  REQUEST_TIMEOUT: 45000,
   KEEP_ALIVE_INTERVAL: 60000,
   CONTEXT_MENU_CHECK_INTERVAL: 300000,
   CACHE_MAX_ITEMS: 20,
@@ -66,6 +66,16 @@ function keepAlive() {
     }
   }, CONFIG.KEEP_ALIVE_INTERVAL);
 }
+
+// Wake up the backend (Render free tier goes to sleep after inactivity)
+function warmupBackend() {
+  fetch('https://ai-calendar-app.onrender.com/health')
+    .catch(() => {}); // Silent fail - just a warmup ping
+}
+
+// Warmup on extension load and periodically
+warmupBackend();
+setInterval(warmupBackend, 10 * 60 * 1000); // Every 10 minutes
 
 // =============================================================================
 // AUTHENTICATION
@@ -459,10 +469,21 @@ function parseTimeToHours(timeStr) {
 // CACHING
 // =============================================================================
 
+function getCacheKey(text) {
+  // Use first 50 chars + length + simple hash of full text for uniqueness
+  const normalized = text.trim().toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    hash = ((hash << 5) - hash) + normalized.charCodeAt(i);
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return `${normalized.substring(0, 50)}_${normalized.length}_${hash}`;
+}
+
 function cacheEvent(text, eventDetails) {
   chrome.storage.local.get(CONFIG.CACHE_KEY, (data) => {
     const cache = data[CONFIG.CACHE_KEY] || {};
-    const key = text.trim().toLowerCase().substring(0, 50);
+    const key = getCacheKey(text);
     
     cache[key] = { eventDetails, timestamp: Date.now() };
     
@@ -482,7 +503,7 @@ function getCachedEvent(text) {
   return new Promise((resolve) => {
     chrome.storage.local.get(CONFIG.CACHE_KEY, (data) => {
       const cache = data[CONFIG.CACHE_KEY] || {};
-      const key = text.trim().toLowerCase().substring(0, 50);
+      const key = getCacheKey(text);
       const item = cache[key];
       
       if (item && Date.now() - item.timestamp < CONFIG.CACHE_EXPIRY) {

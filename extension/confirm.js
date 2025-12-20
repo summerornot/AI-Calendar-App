@@ -689,6 +689,37 @@ document.addEventListener('DOMContentLoaded', function() {
     const picker = document.createElement('div');
     picker.className = 'time-picker';
 
+    // Add text input at top
+    const inputContainer = document.createElement('div');
+    inputContainer.className = 'time-picker-input';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'e.g. 2:25 PM';
+    input.value = isStartTime ? formatTimeForDisplay(startTimeInput.value) : formatTimeForDisplay(endTimeInput.value);
+    
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const parsed = parseTimeInput(input.value);
+        if (parsed) {
+          if (isStartTime) {
+            startTimeInput.value = parsed;
+            endTimeInput.value = addOneHour(parsed);
+          } else {
+            endTimeInput.value = parsed;
+          }
+          updateDateTimeDisplay();
+          removePickers();
+        }
+      }
+    });
+    
+    inputContainer.appendChild(input);
+    picker.appendChild(inputContainer);
+
+    // Add time options
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'time-options';
+    
     const times = generateTimeOptions();
     const currentValue = isStartTime ? startTimeInput.value : endTimeInput.value;
 
@@ -704,9 +735,7 @@ document.addEventListener('DOMContentLoaded', function() {
       option.onclick = () => {
         if (isStartTime) {
           startTimeInput.value = time;
-          // Auto-update end time to 1 hour later
-          const endTime = addOneHour(time);
-          endTimeInput.value = endTime;
+          endTimeInput.value = addOneHour(time);
         } else {
           endTimeInput.value = time;
         }
@@ -714,21 +743,15 @@ document.addEventListener('DOMContentLoaded', function() {
         removePickers();
       };
 
-      picker.appendChild(option);
+      optionsContainer.appendChild(option);
     });
+    
+    picker.appendChild(optionsContainer);
 
     // Position
     const rect = targetElement.getBoundingClientRect();
     picker.style.top = `${rect.bottom + 4}px`;
     picker.style.left = `${rect.left}px`;
-
-    // Scroll to selected time
-    setTimeout(() => {
-      const selected = picker.querySelector('.selected');
-      if (selected) {
-        selected.scrollIntoView({ block: 'center' });
-      }
-    }, 0);
 
     // Overlay
     const overlay = document.createElement('div');
@@ -737,6 +760,51 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.body.appendChild(overlay);
     document.body.appendChild(picker);
+    
+    // Focus input and select text
+    setTimeout(() => {
+      input.focus();
+      input.select();
+      
+      // Scroll to selected time in options
+      const selected = optionsContainer.querySelector('.selected');
+      if (selected) {
+        selected.scrollIntoView({ block: 'center' });
+      }
+    }, 0);
+  }
+
+  function parseTimeInput(input) {
+    const cleaned = input.trim().toUpperCase();
+    
+    // Match formats: 2:25 PM, 2:25PM, 14:25, 2PM, 2 PM
+    let match = cleaned.match(/^(\d{1,2}):?(\d{2})?\s*(AM|PM)?$/i);
+    if (!match) return null;
+    
+    let hours = parseInt(match[1]);
+    let minutes = match[2] ? parseInt(match[2]) : 0;
+    let period = match[3];
+    
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    
+    if (!period) {
+      if (hours === 0) {
+        hours = 12;
+        period = 'AM';
+      } else if (hours < 12) {
+        period = 'AM';
+      } else if (hours === 12) {
+        period = 'PM';
+      } else {
+        period = 'PM';
+        hours = hours - 12;
+      }
+    } else {
+      if (hours > 12) hours = hours - 12;
+      else if (hours === 0) hours = 12;
+    }
+    
+    return `${hours}:${String(minutes).padStart(2, '0')} ${period}`;
   }
 
   function generateTimeOptions() {
