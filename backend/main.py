@@ -9,7 +9,8 @@ from pydantic import BaseModel, validator
 from typing import List, Optional
 import re
 from dotenv import load_dotenv
-from langsmith import traceable
+from langsmith import traceable, Client
+from langsmith.anonymizer import create_anonymizer
 
 # Error codes matching frontend errors.js
 class ErrorCodes:
@@ -57,6 +58,37 @@ except OpenAIError as e:
     print(f"OpenAI API key is invalid or there was an error: {str(e)}")
     client = None
     print("Using mock response mode for testing.")
+
+# Initialize LangSmith client with PII anonymization
+# This redacts sensitive user data while keeping AI-extracted event details for quality monitoring
+anonymizer = create_anonymizer([
+    # Email addresses
+    {"pattern": r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", 
+     "replace": "[EMAIL_REDACTED]"},
+    
+    # Phone numbers (various formats)
+    {"pattern": r"\b(?:\+?1[-\.\s]?)?\(?\d{3}\)?[-\.\s]?\d{3}[-\.\s]?\d{4}\b", 
+     "replace": "[PHONE_REDACTED]"},
+    
+    # Names (basic pattern - capitalized words)
+    {"pattern": r"\b([A-Z][a-z]+\s[A-Z][a-z]+)\b", 
+     "replace": "[NAME_REDACTED]"},
+    
+    # Street addresses
+    {"pattern": r"\d+\s+[\w\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Circle|Cir|Way|Parkway|Pkwy)", 
+     "replace": "[ADDRESS_REDACTED]"},
+    
+    # Credit card numbers
+    {"pattern": r"\b(?:\d[ -]*?){13,16}\b", 
+     "replace": "[CARD_REDACTED]"},
+    
+    # Social Security Numbers
+    {"pattern": r"\b\d{3}-\d{2}-\d{4}\b", 
+     "replace": "[SSN_REDACTED]"}
+])
+
+langsmith_client = Client(anonymizer=anonymizer)
+print("LangSmith client initialized with PII anonymization for user input.")
 
 # Time format regex
 TIME_FORMAT = re.compile(r'^(1[0-2]|0?[1-9]):([0-5][0-9])\s*(AM|PM)$', re.IGNORECASE)
@@ -228,9 +260,13 @@ def get_mock_response(text: str, current_time: str):
             "description": ""
         }
 
-@traceable(run_type="llm")
+@traceable(run_type="llm", client=langsmith_client)
 def call_openai_extraction(system_prompt: str, user_text: str):
-    """Call OpenAI API for event extraction with LangSmith tracing."""
+    """Call OpenAI API for event extraction with LangSmith tracing.
+    
+    Note: User input text is anonymized (PII redacted) before being sent to LangSmith.
+    AI-extracted event details are NOT anonymized to enable quality monitoring.
+    """
     return client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
@@ -241,7 +277,7 @@ def call_openai_extraction(system_prompt: str, user_text: str):
         function_call={"name": "createEvent"}
     )
 
-@traceable(run_type="chain")
+@traceable(run_type="chain", client=langsmith_client)
 def process_text(text: str, current_time: str, user_timezone: str = 'UTC'):
     try:
         # If no API key or client is invalid, use mock response
@@ -333,7 +369,7 @@ Call createEvent with the extracted details.'''
         # Re-raise to be handled by the endpoint with partial data preservation
         raise
 
-@traceable
+@traceable(client=langsmith_client)
 def create_fallback_response(text: str, current_time: str, error_message: str, user_timezone: str = 'UTC', error_code: str = None):
     """
     Create a fallback response that preserves any extractable information.
@@ -488,9 +524,13 @@ class CalendarSaveResult(BaseModel):
     extraction_duration_ms: Optional[int] = None
     save_duration_ms: Optional[int] = None
 
-@traceable(run_type="chain", name="calendar_save_result")
+@traceable(run_type="chain", name="calendar_save_result", client=langsmith_client)
 def log_calendar_save(result: CalendarSaveResult):
-    """Log calendar save result for end-to-end tracing."""
+    """Log calendar save result for end-to-end tracing.
+    
+    Note: Event details (title, date, time) are NOT anonymized here as they are
+    AI-extracted data used for quality monitoring and accuracy improvement.
+    """
     return {
         "success": result.success,
         "event_id": result.event_id,
