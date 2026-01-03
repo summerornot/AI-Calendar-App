@@ -9,9 +9,19 @@ venv/
 .venv/
 ENV/
 
-# Credentials
+# Credentials & Secrets
 backend/credentials.json
 backend/token.pickle
+extension/client_secret.json
+*.pem
+*.key
+
+# Build artifacts
+*.zip
+builds/
+dist/
+temp_icons/
+*.crx
 
 # OS
 .DS_Store
@@ -21,3 +31,25 @@ backend/token.pickle
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test files
+test-page.html
+*-test.js
+*-old.js
+*-new.js
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Node modules (if any)
+node_modules/
