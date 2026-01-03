@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Add to Calendar",
-  "version": "1.1.4",
-  "description": "Quickly create Google Calendar events from selected text on webpages",
+  "name": "Toki – AI Calendar Assistant",
+  "version": "1.2.0",
+  "description": "Highlight text and let Toki create precise Google Calendar events using AI — fast, multilingual, timezone-aware",
   "permissions": [
     "contextMenus",
     "storage",
