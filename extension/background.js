@@ -11,7 +11,7 @@
 
 const CONFIG = {
   CONTEXT_MENU_ID: 'addToCalendar',
-  CONTEXT_MENU_TITLE: 'Add to Calendar',
+  CONTEXT_MENU_TITLE: 'Toki - Add to Calendar',
   BACKEND_URL: 'https://ai-calendar-app.onrender.com/process_event',
   LOG_SAVE_URL: 'https://ai-calendar-app.onrender.com/log_calendar_save',
   CALENDAR_API_URL: 'https://www.googleapis.com/calendar/v3/calendars/primary/events',
@@ -85,10 +85,33 @@ function checkAuthStatus(interactive = false) {
   return new Promise((resolve) => {
     chrome.identity.getAuthToken({ interactive }, (token) => {
       if (chrome.runtime.lastError || !token) {
-        resolve(null);
+        const error = chrome.runtime.lastError?.message || 'No token received';
+        console.error('Auth error:', error);
+        resolve({ token: null, error });
       } else {
         chrome.storage.local.set({ isAuthenticated: true });
-        resolve(token);
+        resolve({ token, error: null });
+      }
+    });
+  });
+}
+
+function clearCachedToken() {
+  return new Promise((resolve) => {
+    chrome.identity.getAuthToken({ interactive: false }, (token) => {
+      if (chrome.runtime.lastError) {
+        // No token to clear
+        resolve(false);
+        return;
+      }
+      if (token) {
+        chrome.identity.removeCachedAuthToken({ token }, () => {
+          console.log('Cleared cached token');
+          chrome.storage.local.set({ isAuthenticated: false });
+          resolve(true);
+        });
+      } else {
+        resolve(false);
       }
     });
   });
@@ -96,14 +119,14 @@ function checkAuthStatus(interactive = false) {
 
 async function getAuthToken() {
   // Try non-interactive first (faster)
-  let token = await checkAuthStatus(false);
-  if (!token) {
-    token = await checkAuthStatus(true);
+  let result = await checkAuthStatus(false);
+  if (!result.token) {
+    result = await checkAuthStatus(true);
   }
-  if (!token) {
-    throw new Error('Authentication failed');
+  if (!result.token) {
+    throw new Error(result.error || 'Authentication failed');
   }
-  return token;
+  return result.token;
 }
 
 // =============================================================================
@@ -316,12 +339,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Async response
     
   } else if (action === 'checkAuthStatus') {
-    checkAuthStatus().then(token => sendResponse({ isAuthenticated: !!token }));
+    checkAuthStatus().then(result => sendResponse({ 
+      isAuthenticated: !!result.token,
+      error: result.error 
+    }));
     return true;
     
   } else if (action === 'authenticate') {
-    checkAuthStatus(true)
-      .then(token => sendResponse({ success: !!token, error: token ? null : 'Authentication failed' }))
+    // Clear any cached token first (handles scope changes)
+    clearCachedToken().then(() => {
+      return checkAuthStatus(true);
+    }).then(result => {
+      sendResponse({ 
+        success: !!result.token, 
+        error: result.error 
+      });
+    }).catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+    
+  } else if (action === 'clearToken') {
+    clearCachedToken()
+      .then(cleared => sendResponse({ success: true, cleared }))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }

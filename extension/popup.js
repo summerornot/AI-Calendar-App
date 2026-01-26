@@ -31,15 +31,19 @@ function checkAuthStatus() {
 // Initialize authentication
 document.getElementById('auth-button').addEventListener('click', function() {
   debugLog('Auth button clicked, sending authenticate message');
+  const authStatusDiv = document.getElementById('auth-status');
+  authStatusDiv.textContent = 'Connecting...';
+  authStatusDiv.style.color = '#5f6368';
+  
   chrome.runtime.sendMessage({action: 'authenticate'}, function(response) {
     debugLog('Auth response: ' + JSON.stringify(response));
     if (response && response.success) {
       checkAuthStatus();
     } else {
-      const authStatusDiv = document.getElementById('auth-status');
-      authStatusDiv.textContent = 'Authentication failed. Please try again.';
+      const errorMsg = response?.error || 'Unknown error';
+      authStatusDiv.textContent = 'Authentication failed: ' + errorMsg;
       authStatusDiv.style.color = '#EA4335';
-      debugLog('Authentication failed: ' + (response ? response.error : 'Unknown error'));
+      debugLog('Authentication failed: ' + errorMsg);
     }
   });
 });
