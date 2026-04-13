@@ -86,7 +86,7 @@ function checkAuthStatus(interactive = false) {
     chrome.identity.getAuthToken({ interactive }, (token) => {
       if (chrome.runtime.lastError || !token) {
         const error = chrome.runtime.lastError?.message || 'No token received';
-        console.error('Auth error:', error);
+        chrome.storage.local.set({ isAuthenticated: false });
         resolve({ token: null, error });
       } else {
         chrome.storage.local.set({ isAuthenticated: true });
@@ -94,6 +94,34 @@ function checkAuthStatus(interactive = false) {
       }
     });
   });
+}
+
+function getAuthErrorHint(errorMessage) {
+  const msg = (errorMessage || '').toLowerCase();
+
+  // Common when running unpacked: OAuth credential is tied to a different extension ID.
+  if (msg.includes('redirect_uri_mismatch') || msg.includes('redirect uri mismatch')) {
+    return 'OAuth is misconfigured (redirect URI mismatch). This often happens if your extension ID changed. Recreate the OAuth credential as a Chrome Extension credential for your current extension ID, or set a fixed manifest key to keep the same ID.';
+  }
+
+  if (msg.includes('oauth2 request failed') || msg.includes('bad client id') || msg.includes('invalid_client')) {
+    return 'OAuth client configuration looks invalid. Verify the manifest oauth2.client_id matches the Google Cloud OAuth credential, and that the credential type is Chrome Extension with your current extension ID.';
+  }
+
+  if (msg.includes('not signed in') || msg.includes('user is not signed in')) {
+    return 'You are not signed in to Chrome with a Google account, or Chrome has no active session. Sign in to Chrome and try again.';
+  }
+
+  if (msg.includes('cancelled') || msg.includes('canceled') || msg.includes('user rejected')) {
+    return 'The sign-in / consent flow was cancelled. Try saving again and complete the Google consent prompt.';
+  }
+
+  return null;
+}
+
+function formatAuthError(errorMessage) {
+  const hint = getAuthErrorHint(errorMessage);
+  return hint ? `Authentication failed: ${hint}` : `Authentication failed: ${errorMessage || 'No token received'}`;
 }
 
 function clearCachedToken() {
@@ -124,7 +152,7 @@ async function getAuthToken() {
     result = await checkAuthStatus(true);
   }
   if (!result.token) {
-    throw new Error(result.error || 'Authentication failed');
+    throw new Error(formatAuthError(result.error));
   }
   return result.token;
 }
@@ -193,8 +221,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // EVENT EXTRACTION
 // =============================================================================
 
+function generateRunId() {
+  return 'run_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
 async function processSelectedText(selectedText, tab) {
-  chrome.storage.local.set({ pendingEvent: selectedText });
+  // Generate parent run ID for this user action
+  const parentRunId = generateRunId();
+  chrome.storage.local.set({ pendingEvent: selectedText, parentRunId });
   
   chrome.tabs.sendMessage(tab.id, { action: 'showModal', state: 'loading' }, async () => {
     if (chrome.runtime.lastError) return;
@@ -205,9 +239,13 @@ async function processSelectedText(selectedText, tab) {
       await showEventForm(cached, tab.id);
       return;
     }
-    
+
+    // Retrieve parent run ID from storage
+    const storage = await chrome.storage.local.get('parentRunId');
+    const parentRunId = storage.parentRunId;
+
     try {
-      const eventDetails = await fetchEventFromBackend(selectedText);
+      const eventDetails = await fetchEventFromBackend(selectedText, parentRunId);
       
       // Backend returned error without usable data
       if (eventDetails.error_code && !eventDetails.title) {
@@ -226,23 +264,27 @@ async function processSelectedText(selectedText, tab) {
   });
 }
 
-async function fetchEventFromBackend(text) {
+async function fetchEventFromBackend(text, parentRunId) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT);
-  
+
   const textLower = text.toLowerCase();
   const timeContext = textLower.includes('pm') || textLower.includes('evening') || textLower.includes('afternoon')
     ? 'pm' : textLower.includes('am') ? 'am' : 'unknown';
-  
+
   try {
     const response = await fetch(CONFIG.BACKEND_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Parent-Run-Id': parentRunId || ''
+      },
       body: JSON.stringify({
         text,
         current_time: new Date().toISOString(),
         user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        context: { time_context: timeContext }
+        context: { time_context: timeContext },
+        parent_run_id: parentRunId
       }),
       signal: controller.signal
     });
@@ -335,7 +377,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     
     createCalendarEvent(eventDetails)
       .then(sendResponse)
-      .catch(err => sendResponse({ success: false, error: err.message }));
+      .catch(err => {
+        console.error('createEvent failed:', err);
+        sendResponse({ success: false, error: err.message });
+      });
     return true; // Async response
     
   } else if (action === 'checkAuthStatus') {
@@ -437,10 +482,20 @@ async function createCalendarEvent(eventDetails) {
 // Log calendar save result to backend for LangSmith tracing
 async function logCalendarSave(data) {
   try {
+    // Get parent run ID from storage
+    const storage = await chrome.storage.local.get('parentRunId');
+    const parentRunId = storage.parentRunId;
+
     await fetch(CONFIG.LOG_SAVE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Parent-Run-Id': parentRunId || ''
+      },
+      body: JSON.stringify({
+        ...data,
+        parent_run_id: parentRunId
+      })
     });
   } catch (e) {
     // Silent fail - don't break the main flow

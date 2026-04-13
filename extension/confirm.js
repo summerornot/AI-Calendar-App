@@ -227,6 +227,12 @@ document.addEventListener('DOMContentLoaded', function() {
       description: descriptionInput.value.trim()
     };
 
+    // CRITICAL ASSERTIONS: Debug-only validation (validateForm already checked these)
+    console.assert(eventDetails.title, 'Event title is required');
+    console.assert(/^\d{4}-\d{2}-\d{2}$/.test(eventDetails.date), `Invalid date format: ${eventDetails.date}`);
+    console.assert(/^(1[0-2]|0?[1-9]):([0-5][0-9])\s*(AM|PM)$/i.test(eventDetails.startTime), `Invalid start time: ${eventDetails.startTime}`);
+    console.assert(/^(1[0-2]|0?[1-9]):([0-5][0-9])\s*(AM|PM)$/i.test(eventDetails.endTime), `Invalid end time: ${eventDetails.endTime}`);
+
     console.log('Creating event:', eventDetails);
 
     chrome.runtime.sendMessage({

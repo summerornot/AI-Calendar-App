@@ -9,7 +9,7 @@ from pydantic import BaseModel, validator
 from typing import List, Optional
 import re
 from dotenv import load_dotenv
-from langsmith import traceable, Client
+from langsmith import traceable, Client, trace
 from langsmith.anonymizer import create_anonymizer
 
 # Error codes matching frontend errors.js
@@ -277,8 +277,8 @@ def call_openai_extraction(system_prompt: str, user_text: str):
         function_call={"name": "createEvent"}
     )
 
-@traceable(run_type="chain", client=langsmith_client)
-def process_text(text: str, current_time: str, user_timezone: str = 'UTC'):
+def _process_text_core(text: str, current_time: str, user_timezone: str = 'UTC'):
+    """Core logic for processing text (separated for trace wrapping)."""
     try:
         # If no API key or client is invalid, use mock response
         if not client:
@@ -332,7 +332,13 @@ Call createEvent with the extracted details.'''
         # Parse the arguments
         event_details = json.loads(function_call.arguments)
         print(f"Parsed event details: {event_details}")
-        
+
+        # CRITICAL ASSERTION: Required fields must be present
+        assert 'title' in event_details and event_details['title'], f"GPT response missing title: {event_details}"
+        assert 'date' in event_details and event_details['date'], f"GPT response missing date: {event_details}"
+        assert 'startTime' in event_details and event_details['startTime'], f"GPT response missing startTime: {event_details}"
+        assert 'endTime' in event_details, f"GPT response missing endTime field: {event_details}"  # endTime can be empty but field must exist
+
         # If no end time, add one hour to start time
         if not event_details.get('endTime'):
             event_details['endTime'] = add_one_hour(event_details['startTime'])
@@ -354,8 +360,13 @@ Call createEvent with the extracted details.'''
             # Re-validate with corrected date
             event = EventDetails(**event_details)
         
+        # CRITICAL ASSERTION: End time must be after start time
+        start_dt = datetime.strptime(f"{event.date} {event.startTime}", '%Y-%m-%d %I:%M %p')
+        end_dt = datetime.strptime(f"{event.date} {event.endTime}", '%Y-%m-%d %I:%M %p')
+        assert end_dt > start_dt, f"End time {event.endTime} must be after start time {event.startTime}"
+
         result = event.model_dump()
-        
+
         # Add a flag if date was auto-corrected so UI can show a warning
         if date_was_corrected:
             result['error_code'] = ErrorCodes.PAST_DATE
@@ -368,6 +379,31 @@ Call createEvent with the extracted details.'''
         print(f"Error processing text: {str(e)}")
         # Re-raise to be handled by the endpoint with partial data preservation
         raise
+
+def process_text(text: str, current_time: str, user_timezone: str = 'UTC', parent_run_id: str = None):
+    """Process text to extract event details with optional distributed tracing.
+
+    Args:
+        text: The text to process
+        current_time: ISO timestamp from the user's device
+        user_timezone: User's timezone string
+        parent_run_id: Optional parent run ID for distributed tracing (from Chrome extension)
+    """
+    if parent_run_id:
+        # Use explicit trace context with parent for distributed tracing
+        with trace(
+            name="process_event",
+            run_type="chain",
+            inputs={"text": text[:100], "current_time": current_time, "user_timezone": user_timezone},
+            parent=parent_run_id,
+            client=langsmith_client
+        ) as run:
+            result = _process_text_core(text, current_time, user_timezone)
+            run.outputs = result
+            return result
+    else:
+        # No parent - run as standalone (backward compatible)
+        return _process_text_core(text, current_time, user_timezone)
 
 @traceable(client=langsmith_client)
 def create_fallback_response(text: str, current_time: str, error_message: str, user_timezone: str = 'UTC', error_code: str = None):
@@ -460,13 +496,15 @@ async def process_event(request: Request):
     text = ''
     current_time = None
     user_timezone = 'UTC'
-    
+    parent_run_id = None
+
     try:
         data = await request.json()
         text = data.get('text', '')
         current_time = data.get('current_time')  # ISO string from frontend
         user_timezone = data.get('user_timezone', 'UTC')  # User's timezone from browser
-        
+        parent_run_id = data.get('parent_run_id')  # Parent trace ID from extension
+
         # Validate text length
         if not text or len(text.strip()) == 0:
             print("Error: No text provided")
@@ -474,27 +512,27 @@ async def process_event(request: Request):
                 "error_code": ErrorCodes.TEXT_TOO_SHORT,
                 "extraction_error": "No text provided. Please select some text containing event details."
             }
-        
+
         if len(text.strip()) < 10:
             print(f"Error: Text too short ({len(text.strip())} chars)")
             return {
                 "error_code": ErrorCodes.TEXT_TOO_SHORT,
                 "extraction_error": "Please select more text that includes event details like date, time, and description."
             }
-        
+
         if len(text) > 5000:
             print(f"Error: Text too long ({len(text)} chars)")
             return {
                 "error_code": ErrorCodes.TEXT_TOO_LONG,
                 "extraction_error": "Please select a shorter portion of text containing just the event details."
             }
-            
+
         if not current_time:
             print("Error: No current time provided")
             current_time = datetime.now().isoformat()  # Use server time as fallback
-        
-        print(f"Processing text: '{text[:100]}...', current_time: '{current_time}', timezone: '{user_timezone}'")
-        return process_text(text, current_time, user_timezone)
+
+        print(f"Processing text: '{text[:100]}...', current_time: '{current_time}', timezone: '{user_timezone}', parent_run_id: '{parent_run_id}'")
+        return process_text(text, current_time, user_timezone, parent_run_id)
         
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
@@ -523,14 +561,10 @@ class CalendarSaveResult(BaseModel):
     error: Optional[str] = None
     extraction_duration_ms: Optional[int] = None
     save_duration_ms: Optional[int] = None
+    parent_run_id: Optional[str] = None  # For distributed tracing across extension contexts
 
-@traceable(run_type="chain", name="calendar_save_result", client=langsmith_client)
-def log_calendar_save(result: CalendarSaveResult):
-    """Log calendar save result for end-to-end tracing.
-    
-    Note: Event details (title, date, time) are NOT anonymized here as they are
-    AI-extracted data used for quality monitoring and accuracy improvement.
-    """
+def _log_calendar_save_core(result: CalendarSaveResult):
+    """Core logic for logging calendar save (separated for trace wrapping)."""
     return {
         "success": result.success,
         "event_id": result.event_id,
@@ -541,6 +575,32 @@ def log_calendar_save(result: CalendarSaveResult):
         "extraction_duration_ms": result.extraction_duration_ms,
         "save_duration_ms": result.save_duration_ms
     }
+
+def log_calendar_save(result: CalendarSaveResult):
+    """Log calendar save result for end-to-end tracing with optional distributed tracing.
+
+    Note: Event details (title, date, time) are NOT anonymized here as they are
+    AI-extracted data used for quality monitoring and accuracy improvement.
+    """
+    if result.parent_run_id:
+        # Use explicit trace context with parent for distributed tracing
+        with trace(
+            name="calendar_save_result",
+            run_type="chain",
+            inputs={
+                "event_title": result.event_title,
+                "event_date": result.event_date,
+                "success": result.success
+            },
+            parent=result.parent_run_id,
+            client=langsmith_client
+        ) as run:
+            output = _log_calendar_save_core(result)
+            run.outputs = output
+            return output
+    else:
+        # No parent - run as standalone (backward compatible)
+        return _log_calendar_save_core(result)
 
 @app.post("/log_calendar_save")
 async def log_calendar_save_endpoint(result: CalendarSaveResult):
