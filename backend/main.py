@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from openai import OpenAI, OpenAIError
 from datetime import datetime, timedelta
 import os
@@ -10,6 +11,7 @@ from typing import List, Optional
 import re
 from dotenv import load_dotenv
 from langsmith import traceable, Client, trace
+from langsmith.run_trees import RunTree
 from langsmith.anonymizer import create_anonymizer
 
 # Error codes matching frontend errors.js
@@ -387,51 +389,61 @@ Call createEvent with the extracted details.'''
         # Re-raise to be handled by the endpoint with partial data preservation
         raise
 
-def process_text(text: str, current_time: str, user_timezone: str = 'UTC', parent_run_id: str = None):
+def process_text(text: str, current_time: str, user_timezone: str = 'UTC', trace_context: dict = None):
     """Process text to extract event details with optional distributed tracing.
 
     Args:
         text: The text to process
         current_time: ISO timestamp from the user's device
         user_timezone: User's timezone string
-        parent_run_id: Optional parent run ID for distributed tracing (from Chrome extension)
+        trace_context: Optional trace context from previous request for distributed tracing
     """
-    if parent_run_id:
-        # Child run - use provided parent_run_id
+    if trace_context:
+        # Child run - reconstruct parent from trace context
+        parent_run = RunTree(
+            id=trace_context.get('run_id'),
+            trace_id=trace_context.get('trace_id'),
+            project_name=trace_context.get('project_name', 'default'),
+            client=langsmith_client
+        )
         with trace(
             name="process_event",
             run_type="chain",
             inputs={"text": text[:100], "current_time": current_time, "user_timezone": user_timezone},
-            parent_run_id=parent_run_id,
+            parent=parent_run,
             client=langsmith_client
         ) as run:
             result = _process_text_core(text, current_time, user_timezone)
             run.outputs = result
-            # Include run_id in result for extension to use as parent for save
-            result['run_id'] = str(run.id)
-            return result
+            return result, None  # No new context to return
     else:
-        # Create parent trace and return its ID
-        with trace(
+        # Create parent trace - this is the root of the distributed trace
+        parent_run = RunTree(
             name="user_action",
             run_type="chain",
             inputs={"action": "extract_and_save_event", "text": text[:100]},
             client=langsmith_client
-        ) as parent_run:
-            # Create child trace for process_event
-            with trace(
-                name="process_event",
-                run_type="chain",
-                inputs={"text": text[:100], "current_time": current_time, "user_timezone": user_timezone},
-                parent=parent_run,
-                client=langsmith_client
-            ) as run:
-                result = _process_text_core(text, current_time, user_timezone)
-                run.outputs = result
-                # Return both the result and IDs for extension to use
-                result['run_id'] = str(run.id)
-                result['parent_run_id'] = str(parent_run.id)
-                return result
+        )
+        parent_run.post()
+
+        # Create child trace for process_event
+        with trace(
+            name="process_event",
+            run_type="chain",
+            inputs={"text": text[:100], "current_time": current_time, "user_timezone": user_timezone},
+            parent=parent_run,
+            client=langsmith_client
+        ) as run:
+            result = _process_text_core(text, current_time, user_timezone)
+            run.outputs = result
+
+            # Return trace context for extension to propagate
+            trace_context = {
+                'run_id': str(parent_run.id),
+                'trace_id': str(parent_run.trace_id),
+                'project_name': parent_run.project_name
+            }
+            return result, trace_context
 
 @traceable(client=langsmith_client)
 def create_fallback_response(text: str, current_time: str, error_message: str, user_timezone: str = 'UTC', error_code: str = None):
@@ -524,14 +536,14 @@ async def process_event(request: Request):
     text = ''
     current_time = None
     user_timezone = 'UTC'
-    parent_run_id = None
+    trace_context = None
 
     try:
         data = await request.json()
         text = data.get('text', '')
         current_time = data.get('current_time')  # ISO string from frontend
         user_timezone = data.get('user_timezone', 'UTC')  # User's timezone from browser
-        parent_run_id = data.get('parent_run_id')  # Parent trace ID from extension
+        trace_context = data.get('trace_context')  # Trace context from extension for distributed tracing
 
         # Validate text length
         if not text or len(text.strip()) == 0:
@@ -559,25 +571,34 @@ async def process_event(request: Request):
             print("Error: No current time provided")
             current_time = datetime.now().isoformat()  # Use server time as fallback
 
-        print(f"Processing text: '{text[:100]}...', current_time: '{current_time}', timezone: '{user_timezone}', parent_run_id: '{parent_run_id}'")
-        return process_text(text, current_time, user_timezone, parent_run_id)
-        
+        print(f"Processing text: '{text[:100]}...', current_time: '{current_time}', timezone: '{user_timezone}', trace_context: {trace_context}")
+        result, new_trace_context = process_text(text, current_time, user_timezone, trace_context)
+
+        # Return trace context in response headers for extension to store
+        headers = {}
+        if new_trace_context:
+            headers['X-Trace-Context'] = json.dumps(new_trace_context)
+            print(f"Returning trace context: {new_trace_context}")
+
+        return JSONResponse(content=result, headers=headers)
+
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
-        
+
     except Exception as e:
         print(f"Error in process_event: {str(e)}")
         error_str = str(e).lower()
-        
+
         # Determine specific error code
         error_code = ErrorCodes.UNKNOWN_ERROR
         if 'timeout' in error_str or 'timed out' in error_str:
             error_code = ErrorCodes.BACKEND_TIMEOUT
         elif 'rate limit' in error_str or '429' in error_str:
             error_code = ErrorCodes.RATE_LIMITED
-        
+
         # Return partial extraction with error flag - preserve any extracted info
-        return create_fallback_response(text, current_time, str(e), user_timezone, error_code)
+        fallback = create_fallback_response(text, current_time, str(e), user_timezone, error_code)
+        return JSONResponse(content=fallback)
 
 class CalendarSaveResult(BaseModel):
     success: bool
@@ -589,7 +610,7 @@ class CalendarSaveResult(BaseModel):
     error: Optional[str] = None
     extraction_duration_ms: Optional[int] = None
     save_duration_ms: Optional[int] = None
-    parent_run_id: Optional[str] = None  # For distributed tracing across extension contexts
+    trace_context: Optional[dict] = None  # Distributed tracing context from process_event
 
 def _log_calendar_save_core(result: CalendarSaveResult):
     """Core logic for logging calendar save (separated for trace wrapping)."""
@@ -610,8 +631,15 @@ def log_calendar_save(result: CalendarSaveResult):
     Note: Event details (title, date, time) are NOT anonymized here as they are
     AI-extracted data used for quality monitoring and accuracy improvement.
     """
-    if result.parent_run_id:
-        # Use explicit trace context with parent for distributed tracing
+    if result.trace_context:
+        # Reconstruct parent run from trace context
+        parent_run = RunTree(
+            id=result.trace_context.get('run_id'),
+            trace_id=result.trace_context.get('trace_id'),
+            project_name=result.trace_context.get('project_name', 'default'),
+            client=langsmith_client
+        )
+        # Create child trace for calendar save
         with trace(
             name="calendar_save_result",
             run_type="chain",
@@ -620,14 +648,14 @@ def log_calendar_save(result: CalendarSaveResult):
                 "event_date": result.event_date,
                 "success": result.success
             },
-            parent_run_id=result.parent_run_id,
+            parent=parent_run,
             client=langsmith_client
         ) as run:
             output = _log_calendar_save_core(result)
             run.outputs = output
             return output
     else:
-        # No parent - run as standalone (backward compatible)
+        # No trace context - run as standalone (backward compatible)
         return _log_calendar_save_core(result)
 
 @app.post("/log_calendar_save")

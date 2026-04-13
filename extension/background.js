@@ -226,9 +226,9 @@ function generateRunId() {
 }
 
 async function processSelectedText(selectedText, tab) {
-  // Clear any old parent run ID - backend will create fresh parent trace
+  // Clear any old trace context - backend will create fresh parent trace
   chrome.storage.local.set({ pendingEvent: selectedText });
-  chrome.storage.local.remove(['parentRunId']);
+  chrome.storage.local.remove(['traceContext']);
   
   chrome.tabs.sendMessage(tab.id, { action: 'showModal', state: 'loading' }, async () => {
     if (chrome.runtime.lastError) return;
@@ -240,14 +240,14 @@ async function processSelectedText(selectedText, tab) {
       return;
     }
 
-    // Check if we have a parent run ID from a previous step
-    const storage = await chrome.storage.local.get('parentRunId');
-    const parentRunId = storage.parentRunId;  // Will be undefined on first call
+    // Check if we have trace context from a previous step
+    const storage = await chrome.storage.local.get('traceContext');
+    const traceContext = storage.traceContext;  // Will be undefined on first call
 
     try {
-      // First call: no parentRunId, backend creates parent trace
-      // Subsequent calls: use provided parentRunId
-      const eventDetails = await fetchEventFromBackend(selectedText, parentRunId);
+      // First call: no traceContext, backend creates parent trace
+      // Subsequent calls: use provided traceContext
+      const eventDetails = await fetchEventFromBackend(selectedText, traceContext);
 
       // Backend returned error without usable data
       if (eventDetails.error_code && !eventDetails.title) {
@@ -255,10 +255,10 @@ async function processSelectedText(selectedText, tab) {
         return;
       }
 
-      // Store the parent_run_id for the save step
-      if (eventDetails.parent_run_id) {
-        chrome.storage.local.set({ parentRunId: eventDetails.parent_run_id });
-        console.log('Stored parent_run_id for save step:', eventDetails.parent_run_id);
+      // Store the trace_context for the save step
+      if (eventDetails.trace_context) {
+        chrome.storage.local.set({ traceContext: eventDetails.trace_context });
+        console.log('Stored trace_context for save step:', eventDetails.trace_context);
       }
 
       const normalized = normalizeEventData(eventDetails, selectedText);
@@ -280,7 +280,7 @@ async function fetchEventFromBackend(text, parentRunId) {
   const timeContext = textLower.includes('pm') || textLower.includes('evening') || textLower.includes('afternoon')
     ? 'pm' : textLower.includes('am') ? 'am' : 'unknown';
 
-  // Build request body - only include parent_run_id if provided
+  // Build request body - include trace_context if we have it from previous call
   const requestBody = {
     text,
     current_time: new Date().toISOString(),
@@ -288,31 +288,39 @@ async function fetchEventFromBackend(text, parentRunId) {
     context: { time_context: timeContext }
   };
   if (parentRunId) {
-    requestBody.parent_run_id = parentRunId;
-  }
-
-  // Build headers - only include X-Parent-Run-Id if provided
-  const headers = { 'Content-Type': 'application/json' };
-  if (parentRunId) {
-    headers['X-Parent-Run-Id'] = parentRunId;
+    requestBody.trace_context = parentRunId; // Actually trace_context object, not just ID
   }
 
   try {
     const response = await fetch(CONFIG.BACKEND_URL, {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
       signal: controller.signal
     });
-    
+
     clearTimeout(timeoutId);
-    
+
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
       throw new Error(`Server returned ${response.status}: ${errorText}`);
     }
-    
-    return await response.json();
+
+    const data = await response.json();
+
+    // Extract trace context from response headers
+    const traceContextHeader = response.headers.get('X-Trace-Context');
+    if (traceContextHeader) {
+      try {
+        const traceContext = JSON.parse(traceContextHeader);
+        data.trace_context = traceContext;
+        console.log('Received trace context:', traceContext);
+      } catch (e) {
+        console.error('Failed to parse trace context header:', e);
+      }
+    }
+
+    return data;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -498,19 +506,16 @@ async function createCalendarEvent(eventDetails) {
 // Log calendar save result to backend for LangSmith tracing
 async function logCalendarSave(data) {
   try {
-    // Get parent run ID from storage
-    const storage = await chrome.storage.local.get('parentRunId');
-    const parentRunId = storage.parentRunId;
+    // Get trace context from storage
+    const storage = await chrome.storage.local.get('traceContext');
+    const traceContext = storage.traceContext;
 
     await fetch(CONFIG.LOG_SAVE_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Parent-Run-Id': parentRunId || ''
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...data,
-        parent_run_id: parentRunId
+        trace_context: traceContext
       })
     });
   } catch (e) {
