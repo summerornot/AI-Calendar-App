@@ -90,6 +90,13 @@ anonymizer = create_anonymizer([
 langsmith_client = Client(anonymizer=anonymizer)
 print("LangSmith client initialized with PII anonymization for user input.")
 
+# Check LangSmith configuration
+import os
+langsmith_api_key = os.getenv('LANGSMITH_API_KEY')
+langsmith_tracing = os.getenv('LANGSMITH_TRACING', 'true')
+print(f"LANGSMITH_API_KEY present: {bool(langsmith_api_key)}")
+print(f"LANGSMITH_TRACING: {langsmith_tracing}")
+
 # Time format regex
 TIME_FORMAT = re.compile(r'^(1[0-2]|0?[1-9]):([0-5][0-9])\s*(AM|PM)$', re.IGNORECASE)
 
@@ -395,7 +402,7 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC', paren
             name="process_event",
             run_type="chain",
             inputs={"text": text[:100], "current_time": current_time, "user_timezone": user_timezone},
-            parent=parent_run_id,
+            parent_run_id=parent_run_id,
             client=langsmith_client
         ) as run:
             result = _process_text_core(text, current_time, user_timezone)
@@ -592,7 +599,7 @@ def log_calendar_save(result: CalendarSaveResult):
                 "event_date": result.event_date,
                 "success": result.success
             },
-            parent=result.parent_run_id,
+            parent_run_id=result.parent_run_id,
             client=langsmith_client
         ) as run:
             output = _log_calendar_save_core(result)
