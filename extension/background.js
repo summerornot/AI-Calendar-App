@@ -226,9 +226,9 @@ function generateRunId() {
 }
 
 async function processSelectedText(selectedText, tab) {
-  // Generate parent run ID for this user action
-  const parentRunId = generateRunId();
-  chrome.storage.local.set({ pendingEvent: selectedText, parentRunId });
+  // Clear any old parent run ID - backend will create fresh parent trace
+  chrome.storage.local.set({ pendingEvent: selectedText });
+  chrome.storage.local.remove(['parentRunId']);
   
   chrome.tabs.sendMessage(tab.id, { action: 'showModal', state: 'loading' }, async () => {
     if (chrome.runtime.lastError) return;
@@ -240,19 +240,27 @@ async function processSelectedText(selectedText, tab) {
       return;
     }
 
-    // Retrieve parent run ID from storage
+    // Check if we have a parent run ID from a previous step
     const storage = await chrome.storage.local.get('parentRunId');
-    const parentRunId = storage.parentRunId;
+    const parentRunId = storage.parentRunId;  // Will be undefined on first call
 
     try {
+      // First call: no parentRunId, backend creates parent trace
+      // Subsequent calls: use provided parentRunId
       const eventDetails = await fetchEventFromBackend(selectedText, parentRunId);
-      
+
       // Backend returned error without usable data
       if (eventDetails.error_code && !eventDetails.title) {
         sendError(tab.id, eventDetails.error_code, eventDetails.extraction_error, selectedText);
         return;
       }
-      
+
+      // Store the parent_run_id for the save step
+      if (eventDetails.parent_run_id) {
+        chrome.storage.local.set({ parentRunId: eventDetails.parent_run_id });
+        console.log('Stored parent_run_id for save step:', eventDetails.parent_run_id);
+      }
+
       const normalized = normalizeEventData(eventDetails, selectedText);
       cacheEvent(selectedText, normalized);
       await showEventForm(normalized, tab.id);
@@ -272,20 +280,28 @@ async function fetchEventFromBackend(text, parentRunId) {
   const timeContext = textLower.includes('pm') || textLower.includes('evening') || textLower.includes('afternoon')
     ? 'pm' : textLower.includes('am') ? 'am' : 'unknown';
 
+  // Build request body - only include parent_run_id if provided
+  const requestBody = {
+    text,
+    current_time: new Date().toISOString(),
+    user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    context: { time_context: timeContext }
+  };
+  if (parentRunId) {
+    requestBody.parent_run_id = parentRunId;
+  }
+
+  // Build headers - only include X-Parent-Run-Id if provided
+  const headers = { 'Content-Type': 'application/json' };
+  if (parentRunId) {
+    headers['X-Parent-Run-Id'] = parentRunId;
+  }
+
   try {
     const response = await fetch(CONFIG.BACKEND_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Parent-Run-Id': parentRunId || ''
-      },
-      body: JSON.stringify({
-        text,
-        current_time: new Date().toISOString(),
-        user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        context: { time_context: timeContext },
-        parent_run_id: parentRunId
-      }),
+      headers,
+      body: JSON.stringify(requestBody),
       signal: controller.signal
     });
     

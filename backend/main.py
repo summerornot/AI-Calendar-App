@@ -397,7 +397,7 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC', paren
         parent_run_id: Optional parent run ID for distributed tracing (from Chrome extension)
     """
     if parent_run_id:
-        # Use explicit trace context with parent for distributed tracing
+        # Child run - use provided parent_run_id
         with trace(
             name="process_event",
             run_type="chain",
@@ -407,10 +407,31 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC', paren
         ) as run:
             result = _process_text_core(text, current_time, user_timezone)
             run.outputs = result
+            # Include run_id in result for extension to use as parent for save
+            result['run_id'] = str(run.id)
             return result
     else:
-        # No parent - run as standalone (backward compatible)
-        return _process_text_core(text, current_time, user_timezone)
+        # Create parent trace and return its ID
+        with trace(
+            name="user_action",
+            run_type="chain",
+            inputs={"action": "extract_and_save_event", "text": text[:100]},
+            client=langsmith_client
+        ) as parent_run:
+            # Create child trace for process_event
+            with trace(
+                name="process_event",
+                run_type="chain",
+                inputs={"text": text[:100], "current_time": current_time, "user_timezone": user_timezone},
+                parent=parent_run,
+                client=langsmith_client
+            ) as run:
+                result = _process_text_core(text, current_time, user_timezone)
+                run.outputs = result
+                # Return both the result and IDs for extension to use
+                result['run_id'] = str(run.id)
+                result['parent_run_id'] = str(parent_run.id)
+                return result
 
 @traceable(client=langsmith_client)
 def create_fallback_response(text: str, current_time: str, error_message: str, user_timezone: str = 'UTC', error_code: str = None):
