@@ -403,7 +403,7 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC', trace
         parent_run = RunTree(
             id=trace_context.get('run_id'),
             trace_id=trace_context.get('trace_id'),
-            project_name=trace_context.get('project_name', 'default'),
+            project_name='ai-calendar-extension',
             client=langsmith_client
         )
         with trace(
@@ -441,7 +441,7 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC', trace
             trace_context = {
                 'run_id': str(parent_run.id),
                 'trace_id': str(parent_run.trace_id),
-                'project_name': parent_run.project_name
+                'project_name': 'ai-calendar-extension'  # Use explicit project name
             }
             return result, trace_context
 
@@ -636,7 +636,7 @@ def log_calendar_save(result: CalendarSaveResult):
         parent_run = RunTree(
             id=result.trace_context.get('run_id'),
             trace_id=result.trace_context.get('trace_id'),
-            project_name=result.trace_context.get('project_name', 'default'),
+            project_name='ai-calendar-extension',
             client=langsmith_client
         )
         # Create child trace for calendar save
