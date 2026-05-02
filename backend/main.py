@@ -406,6 +406,8 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC', trace
             project_name='ai-calendar-extension',
             client=langsmith_client
         )
+        # Post the parent run to establish it in the trace hierarchy
+        parent_run.post()
         with trace(
             name="process_event",
             run_type="chain",
@@ -418,32 +420,30 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC', trace
             return result, None  # No new context to return
     else:
         # Create parent trace - this is the root of the distributed trace
-        parent_run = RunTree(
+        with trace(
             name="user_action",
             run_type="chain",
             inputs={"action": "extract_and_save_event", "text": text[:100]},
             client=langsmith_client
-        )
-        parent_run.post()
+        ) as parent_run:
+            # Create child trace for process_event
+            with trace(
+                name="process_event",
+                run_type="chain",
+                inputs={"text": text[:100], "current_time": current_time, "user_timezone": user_timezone},
+                parent=parent_run,
+                client=langsmith_client
+            ) as run:
+                result = _process_text_core(text, current_time, user_timezone)
+                run.outputs = result
 
-        # Create child trace for process_event
-        with trace(
-            name="process_event",
-            run_type="chain",
-            inputs={"text": text[:100], "current_time": current_time, "user_timezone": user_timezone},
-            parent=parent_run,
-            client=langsmith_client
-        ) as run:
-            result = _process_text_core(text, current_time, user_timezone)
-            run.outputs = result
-
-            # Return trace context for extension to propagate
-            trace_context = {
-                'run_id': str(parent_run.id),
-                'trace_id': str(parent_run.trace_id),
-                'project_name': 'ai-calendar-extension'  # Use explicit project name
-            }
-            return result, trace_context
+                # Return trace context for extension to propagate
+                trace_context = {
+                    'run_id': str(parent_run.id),
+                    'trace_id': str(parent_run.trace_id),
+                    'project_name': 'ai-calendar-extension'
+                }
+                return result, trace_context
 
 @traceable(client=langsmith_client)
 def create_fallback_response(text: str, current_time: str, error_message: str, user_timezone: str = 'UTC', error_code: str = None):
@@ -632,13 +632,15 @@ def log_calendar_save(result: CalendarSaveResult):
     AI-extracted data used for quality monitoring and accuracy improvement.
     """
     if result.trace_context:
-        # Reconstruct parent run from trace context
+        # Reconstruct parent run from trace context for distributed tracing
         parent_run = RunTree(
             id=result.trace_context.get('run_id'),
             trace_id=result.trace_context.get('trace_id'),
             project_name='ai-calendar-extension',
             client=langsmith_client
         )
+        # Post the parent run to establish it in the trace hierarchy
+        parent_run.post()
         # Create child trace for calendar save
         with trace(
             name="calendar_save_result",
