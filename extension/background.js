@@ -285,7 +285,10 @@ async function fetchEventFromBackend(text, parentRunId) {
     text,
     current_time: new Date().toISOString(),
     user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    context: { time_context: timeContext }
+    context: { time_context: timeContext },
+    page_url: tab?.url || null,  // URL of current page
+    page_title: tab?.title || null,  // Title of current page
+    selection_context: null  // TODO: Get surrounding text if needed
   };
   if (parentRunId) {
     requestBody.trace_context = parentRunId; // Actually trace_context object, not just ID

@@ -317,7 +317,7 @@ Current date: {current_date}
 Reference: "today" = {current_date}, "tomorrow" = {tomorrow_date}, "next week" = {next_week_date}
 
 RULES:
-1. DATES: If year not specified and date has passed this year, use next year.
+1. DATES: If year not specified, user current year as default.
 2. TIMES: Extract the time exactly as written. DO NOT convert timezones. Ignore timezone labels like (CET), (PT), etc.
 3. If multiple times mentioned, pick the first/primary one (ignore fallback times like "or we could do X").
 4. TITLE: Short (3-5 words), no dates/times in title.
@@ -389,7 +389,7 @@ Call createEvent with the extracted details.'''
         # Re-raise to be handled by the endpoint with partial data preservation
         raise
 
-def process_text(text: str, current_time: str, user_timezone: str = 'UTC', trace_context: dict = None):
+def process_text(text: str, current_time: str, user_timezone: str = 'UTC', trace_context: dict = None, page_url: str = None, page_title: str = None, selection_context: str = None):
     """Process text to extract event details with optional distributed tracing.
 
     Args:
@@ -397,6 +397,9 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC', trace
         current_time: ISO timestamp from the user's device
         user_timezone: User's timezone string
         trace_context: Optional trace context from previous request for distributed tracing
+        page_url: URL of page where text was selected
+        page_title: Title of page where text was selected
+        selection_context: Optional surrounding text context
     """
     if trace_context:
         # Child run - reconstruct parent from trace context
@@ -416,14 +419,46 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC', trace
             client=langsmith_client
         ) as run:
             result = _process_text_core(text, current_time, user_timezone)
-            run.outputs = result
+            
+            # Format output to match recommended structure
+            structured_output = {
+                "title": result.get('title'),
+                "date": result.get('date'),
+                "start_time": result.get('startTime'),
+                "end_time": result.get('endTime'),
+                "timezone": user_timezone,
+                "location": result.get('location'),
+                "description": result.get('description'),
+                "emails": []
+            }
+            run.outputs = structured_output
             return result, None  # No new context to return
     else:
         # Create parent trace - this is the root of the distributed trace
+        trace_inputs = {
+            "highlighted_text": text[:500],
+            "page_url": page_url,
+            "page_title": page_title,
+            "user_timezone": user_timezone,
+            "selection_context": selection_context
+        }
+        
         with trace(
-            name="user_action",
+            name="calendar_extract_request",
             run_type="chain",
-            inputs={"action": "extract_and_save_event", "text": text[:100]},
+            inputs=trace_inputs,
+            tags=["calendar", "extraction", "chrome-extension"],
+            metadata={
+                "app": "calendar-extractor",
+                "source": "chrome_extension",
+                "environment": "production",
+                "app_version": "1.2.3",
+                "model_name": "gpt-3.5-turbo",
+                "model_temperature": 0.0,
+                "prompt_version": "v2.0",
+                "max_tokens": 1000,
+                "function_calling": "enabled"
+            },
             client=langsmith_client
         ) as parent_run:
             # Create child trace for process_event
@@ -432,10 +467,29 @@ def process_text(text: str, current_time: str, user_timezone: str = 'UTC', trace
                 run_type="chain",
                 inputs={"text": text[:100], "current_time": current_time, "user_timezone": user_timezone},
                 parent=parent_run,
+                metadata={
+                    "model_name": "gpt-3.5-turbo",
+                    "model_temperature": 0.0,
+                    "prompt_version": "v2.0",
+                    "max_tokens": 1000,
+                    "function_calling": "enabled"
+                },
                 client=langsmith_client
             ) as run:
                 result = _process_text_core(text, current_time, user_timezone)
-                run.outputs = result
+                
+                # Format output to match recommended structure
+                structured_output = {
+                    "title": result.get('title'),
+                    "date": result.get('date'),
+                    "start_time": result.get('startTime'),
+                    "end_time": result.get('endTime'),
+                    "timezone": user_timezone,
+                    "location": result.get('location'),
+                    "description": result.get('description'),
+                    "emails": []  # Extract emails from text if needed
+                }
+                run.outputs = structured_output
 
                 # Return trace context for extension to propagate
                 trace_context = {
@@ -544,6 +598,9 @@ async def process_event(request: Request):
         current_time = data.get('current_time')  # ISO string from frontend
         user_timezone = data.get('user_timezone', 'UTC')  # User's timezone from browser
         trace_context = data.get('trace_context')  # Trace context from extension for distributed tracing
+        page_url = data.get('page_url')  # URL of page where text was selected
+        page_title = data.get('page_title')  # Title of page where text was selected
+        selection_context = data.get('selection_context')  # Optional surrounding text context
 
         # Validate text length
         if not text or len(text.strip()) == 0:
@@ -572,7 +629,7 @@ async def process_event(request: Request):
             current_time = datetime.now().isoformat()  # Use server time as fallback
 
         print(f"Processing text: '{text[:100]}...', current_time: '{current_time}', timezone: '{user_timezone}', trace_context: {trace_context}")
-        result, new_trace_context = process_text(text, current_time, user_timezone, trace_context)
+        result, new_trace_context = process_text(text, current_time, user_timezone, trace_context, page_url, page_title, selection_context)
 
         # Return trace context in response headers for extension to store
         headers = {}
@@ -617,9 +674,14 @@ def _log_calendar_save_core(result: CalendarSaveResult):
     return {
         "success": result.success,
         "event_id": result.event_id,
-        "event_title": result.event_title,
-        "event_date": result.event_date,
-        "event_time": f"{result.event_start_time} - {result.event_end_time}",
+        "title": result.event_title,
+        "date": result.event_date,
+        "start_time": result.event_start_time,
+        "end_time": result.event_end_time,
+        "timezone": "UTC",  # TODO: Get from result if available
+        "location": None,  # TODO: Get from result if available
+        "description": None,  # TODO: Get from result if available
+        "emails": [],  # TODO: Get from result if available
         "error": result.error,
         "extraction_duration_ms": result.extraction_duration_ms,
         "save_duration_ms": result.save_duration_ms
