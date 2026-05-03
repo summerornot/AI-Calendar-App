@@ -6,7 +6,6 @@
   "permissions": [
     "contextMenus",
     "storage",
-    "action",
     "identity",
     "activeTab",
     "notifications",
@@ -17,7 +16,7 @@
     "https://www.googleapis.com/calendar/v3/*"
   ],
   "oauth2": {
-    "client_id": "905368676199-t6chres56dm34q38bdc4bua25qnpbe18.apps.googleusercontent.com",
+    "client_id": "905368676199-683a51vrjq17c24k4r2he64decqve7bt.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/calendar.events"
     ]

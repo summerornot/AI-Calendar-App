@@ -48,6 +48,14 @@ function createModal(state = 'loading') {
     height: 480px;
   `;
 
+  iframe.addEventListener('load', () => {
+    const pending = window.__aiCalendarPendingIframeMessage;
+    if (pending && iframe.contentWindow) {
+      iframe.contentWindow.postMessage(pending, '*');
+      window.__aiCalendarPendingIframeMessage = null;
+    }
+  });
+
   // Create loading spinner
   const loadingSpinner = document.createElement('div');
   loadingSpinner.id = 'ai-calendar-loading';
@@ -310,6 +318,25 @@ function updateModal(state, data = {}) {
   const errorTitle = document.getElementById('ai-calendar-error-title');
   const errorHint = document.getElementById('ai-calendar-error-hint');
 
+  function postToIframe(message, { retries = 10, delayMs = 150 } = {}) {
+    const currentIframe = document.getElementById('ai-calendar-iframe');
+    if (!currentIframe) return;
+
+    window.__aiCalendarPendingIframeMessage = message;
+
+    const tryPost = (attempt) => {
+      const iframeWindow = currentIframe.contentWindow;
+      if (iframeWindow) {
+        iframeWindow.postMessage(message, '*');
+        return;
+      }
+      if (attempt >= retries) return;
+      setTimeout(() => tryPost(attempt + 1), delayMs);
+    };
+
+    tryPost(0);
+  }
+
   // Reset all elements
   loadingSpinner.style.display = 'none';
   errorContainer.style.display = 'none';
@@ -347,12 +374,10 @@ function updateModal(state, data = {}) {
             iframe.style.display = 'block';
             
             // Send message to iframe to show blank form for manual entry
-            if (iframe.contentWindow) {
-              iframe.contentWindow.postMessage({
-                action: 'showManualEntryForm',
-                selectedText: data.selectedText || ''
-              }, '*');
-            }
+            postToIframe({
+              action: 'showManualEntryForm',
+              selectedText: data.selectedText || ''
+            });
           };
         } else {
           manualEntryBtn.style.display = 'none';
@@ -363,14 +388,14 @@ function updateModal(state, data = {}) {
       iframe.style.display = 'block';
       
       // Send event details to the iframe if available
-      if (iframe.contentWindow && data.eventDetails) {
+      if (data.eventDetails) {
         console.log('Sending event details to iframe:', data.eventDetails);
-        iframe.contentWindow.postMessage({
+        postToIframe({
           action: 'fillForm',
           eventDetails: data.eventDetails
-        }, '*');
+        });
       } else {
-        console.log('No event details to send to iframe or iframe not ready');
+        console.log('No event details to send to iframe');
       }
       break;
     default:
